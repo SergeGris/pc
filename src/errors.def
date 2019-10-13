@@ -7,6 +7,10 @@ SET (function_does_not_support_complex,
 SET (function_does_not_support_matrices,
      _("The function does not support matrices")),
 SET (division_by_zero, _("Division by zero")),
+/* FIXME: */
+  SET (modulo_division_by_non_integer_number,
+       _("Modulo division by non-integer number")),
+
 SET (zero_power_of_zero, _("Zero power of zero")),
 SET (negative_power_of_zero, _("Negative power of zero")),
 SET (complex_power_of_zero, _("Complex power of zero")),

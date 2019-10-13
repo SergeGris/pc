@@ -96,7 +96,7 @@ typedef uint64_t u64;
 
 /* Return a value that pluralizes the same way that N does, in all
    languages we know of.  */
-static inline __attribute__ ((__const__)) unsigned long int
+static inline _GL_ATTRIBUTE_CONST unsigned long int
 select_plural (uintmax_t n)
 {
   /* Reduce by a power of ten, but keep it away from zero.
@@ -166,7 +166,7 @@ select_plural (uintmax_t n)
  * Glory to Martin Uecker <Martin.Uecker@med.uni-goettingen.de>
  */
 #define __is_constexpr(x) \
-  (sizeof (int) == sizeof (*(8 ? ((void *) ((long int) (x) * 0l)) : (int *) 8)))
+  (sizeof (int) == sizeof (*(8 ? ((void *) ((long int) (x) * 0L)) : (int *) 8)))
 
 #define __no_side_effects(x, y) \
   (__is_constexpr (x) && __is_constexpr (y))
@@ -267,7 +267,6 @@ extern void usage (int status) __attribute__ ((__noreturn__));
 
 /* How coreutils quotes filenames, to minimize use of outer quotes,
    but also provide better support for copy and paste when used.  */
-#include "quote.h"
 #include "quotearg.h"
 
 /* Use these to shell quote only when necessary,

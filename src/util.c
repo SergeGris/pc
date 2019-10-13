@@ -123,10 +123,13 @@ pretty_result (char *buf)
 
   if (!use_separator1 && !use_separator2)
     return;
+
   aminmax (separator_freq1, 1, 10000);
   aminmax (separator_freq2, 1, 10000);
+
   f1 = separator_freq1;
   f2 = separator_freq2;
+
   if (base == 2 || base == 16)
     {
       for (i = 1; i < f1; i <<= 1)
@@ -136,10 +139,11 @@ pretty_result (char *buf)
         ;
       f2 = i;
     }
+
   b1 = buf;
   if (*b1 == '+' || *b1 == '-')
     b1++;
-  for (s = b1; *s && *s != ' ' && *s != '.'; s++)
+  for (s = b1; *s != '\0' && *s != ' ' && *s != '.'; s++)
     ;
   e1 = s;
   if (*s == '.')
@@ -162,11 +166,11 @@ pretty_result (char *buf)
   if (use_separator2)
     {
       i = n2 % f2;
-      if (!i)
+      if (i == 0)
         i = f2;
       i++;
     }
-  for (; s > b2;)
+  while (s > b2)
     {
       if (--i == 0)
         {
@@ -180,7 +184,7 @@ pretty_result (char *buf)
   i = use_separator1 ? f1 + 1 : 0;
   for (; s > b1;)
     {
-      if (!--i)
+      if (--i == 0)
         {
           *--d = (char) separator1;
           i = f1;
@@ -209,19 +213,20 @@ bits2digits (mp_prec_t bits)
 {
   static_assert (sizeof (mp_prec_t) >= sizeof (double),
                  "sizeof (mp_prec_t) < sizeof (double)");
-  static_assert ((mp_prec_t)(double) LLONG_MAX == (mp_prec_t) LLONG_MAX,
-                 "(mp_prec_t)(double) LLONG_MAX != (mp_prec_t) LLONG_MAX");
+#if _DEBUG
+  mp_prec_t MPPREC_MAX = LONG_MAX;
+  double DBL_MAX = LONG_MAX;
+  assert (MPPREC_MAX == (mp_prec_t) DBL_MAX);
+#endif
 
   return (mp_prec_t) floor ((double) bits * 0.301029995663981195214);
 }
 
-#undef skip_spaces
-const char *
-skip_spaces (const char *s)
+void
+skip_whitespace (char **s)
 {
-  while (isspace (*s))
-    s++;
-  return s;
+  while (isspace ((unsigned char) **s))
+    (*s)++;
 }
 
 bool
@@ -230,33 +235,33 @@ is_latin_alpha (int c)
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }
 
-char *
-strip_spaces (const char *s)
+void
+strip_spaces (char **s)
 {
-  size_t size = strlen (s) + 1;
-  char *result = xmalloc (size);
-  size_t j = 0;
-  bool copied_space = false;
+  unsigned char *result = *s;
+  size_t i = 0, j = 0;
 
-  for (size_t i = 0; i < strlen (s); i++)
-    if (!isspace (s[i]))
-      {
-        result[j++] = s[i];
-        copied_space = false;
-      }
-    else if (!copied_space)
-      {
-        result[j++] = s[i];
-        copied_space = true;
-      }
+  while (isspace (result[i]))
+    i++;
 
-  result[j] = '\0';
-  return xrealloc (result, j);
+  for (; i < strlen (result); i++)
+    if (!isspace (result[i]))
+      result[j++] = result[i];
+    else if (!isspace (result[j - 1]))
+      result[j++] = ' ';
+
+  if (result[j - 1] == ' ')
+    result[--j] = '\0';
+  else
+    result[j] = '\0';
+
+  *s = xrealloc (result, j);
 }
 
-const char *pc_errors[] =
+static const char *pc_errors[] =
 {
-#define SET(n, s) [n] = s
+  [0] = "cerrno == 0",
+#define SET(i, s) [i] = s
 # include "errors.def"
 #undef SET
 };
@@ -266,8 +271,8 @@ cerror (unsigned int id)
 {
   assert (id < countof (pc_errors));
 
-  if (cerrno != 0)
-    return;
+  if (cerrno != 0 || id == 0)
+   return;
 
   cerrno = id;
 

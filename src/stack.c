@@ -45,7 +45,7 @@ stack_pop (struct stack *s)
 {
   assert (!is_empty (s));
 
-  if (s->n_used > 32 && s->n_used / 2 - 1 > s->n_alloc)
+  if (s->n_used > 32 && s->n_alloc / 2 > s->n_used)
     {
       s->sp -= s->n_used;
       s->sp = xnrealloc (s->sp, s->n_alloc, s->type_size * sizeof (*s) / 2);

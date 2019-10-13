@@ -8,10 +8,17 @@
 
 #include "system.h"
 
+void complex_init (mpc_ptr x);
+void complex_clear (mpc_ptr x);
+void complex_set_si (mpc_ptr x, signed long int n);
+void complex_set_ui (mpc_ptr x, unsigned long int n);
+void complex_init_set_si (mpc_ptr x, signed long int n);
+void complex_init_set_ui (mpc_ptr x, unsigned long int n);
 char *complex_read (mpc_ptr y, const char *buf);
 void complex_write (char *buf, mpc_srcptr x);
 mp_prec_t complex_len (mpc_srcptr x);
 void complex_copy (mpc_ptr y, mpc_srcptr x);
+void complex_imag_suffix (mpc_ptr y, mpc_srcptr x);
 void complex_neg (mpc_ptr x);
 void complex_abs (mpc_ptr x);
 void complex_sign (mpc_ptr x);

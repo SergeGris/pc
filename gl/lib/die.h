@@ -30,4 +30,3 @@
   verify_expr (status, (error (status, __VA_ARGS__), assume (false)))
 
 #endif /* _DIE_H */
-

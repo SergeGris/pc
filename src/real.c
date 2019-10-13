@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <stdio.h>
 
+#include "real.h"
 #include "util.h"
 
 #include "system.h"
@@ -48,29 +49,91 @@ static struct postfix_t
   { 'B', +11 }  // Bundecca
 };
 
-#define UNARY_FUNCTION_BODY(y, x, func)                                 \
-  do                                                                    \
-    mpfr_##func (y, x, mpfr_get_default_rounding_mode ());              \
-  while (0)
-
-#define BINARY_FUNCTION_BODY(y, a, b, func)                             \
-  do                                                                    \
-    mpfr_##func (y, a, b, mpfr_get_default_rounding_mode ());           \
-  while (0)
+#define CONST_FUNCTION_BODY(x, func) \
+  mpfr_##func (x, mpfr_get_default_rounding_mode ())
+#define UNARY_FUNCTION_BODY(y, x, func) \
+  mpfr_##func (y, x, mpfr_get_default_rounding_mode ())
+#define BINARY_FUNCTION_BODY(y, a, b, func) \
+  mpfr_##func (y, a, b, mpfr_get_default_rounding_mode ());
 
 /* x *= base^e */
 static void
-eex (mpfr_ptr x, int64_t e, int base)
+eex (mpfr_ptr x, long int e, int base)
 {
   mpfr_t t, u;
-  mpfr_init_set_si (t, base, mpfr_get_default_rounding_mode ());
-  mpfr_init2 (u, mpfr_get_prec (x));
+  real_init_set_si (t, base);
+  real_init (u);
 
   mpfr_pow_si (u, t, e, mpfr_get_default_rounding_mode ());
   mpfr_mul (x, x, u, mpfr_get_default_rounding_mode ());
 
-  mpfr_clear (u);
-  mpfr_clear (t);
+  real_clear (u);
+  real_clear (t);
+}
+
+void
+real_init (mpfr_ptr x)
+{
+  mpfr_init (x);
+  mpfr_set_zero (x, MPFR_SIGN_POS);
+}
+void
+real_inits (mpfr_ptr x, ...)
+{
+  va_list arg_ptr;
+  va_start (arg_ptr, x);
+  while (x != NULL)
+    {
+      real_init (x);
+      x = va_arg (arg_ptr, mpfr_ptr);
+    }
+  va_end (arg_ptr);
+}
+void
+real_clear (mpfr_ptr x)
+{
+  mpfr_clear (x);
+#if _DEBUG
+  /* Keep it here to know we clear x.  */
+  memcpy (x, "DEADBEEF", sizeof ("DEADBEEF"));
+#endif
+}
+void
+real_clears (mpfr_ptr x, ...)
+{
+  va_list arg_ptr;
+  va_start (arg_ptr, x);
+  while (x != NULL)
+    {
+      real_clear (x);
+      x = va_arg (arg_ptr, mpfr_ptr);
+    }
+  va_end (arg_ptr);
+}
+void
+real_set_si (mpfr_ptr x, signed long int n)
+{
+  mpfr_set_si (x, n, mpfr_get_default_rounding_mode ());
+}
+void
+real_set_ui (mpfr_ptr x, unsigned long int n)
+{
+  mpfr_set_ui (x, n, mpfr_get_default_rounding_mode ());
+}
+void
+real_init_set_si (mpfr_ptr x, signed long int n)
+{
+  mpfr_init_set_si (x, n, mpfr_get_default_rounding_mode ());
+}
+void
+real_init_set_ui (mpfr_ptr x, unsigned long int n)
+{
+  mpfr_init_set_ui (x, n, mpfr_get_default_rounding_mode ());
+}
+void
+real_set_zero (mpfr_ptr x)
+{
+  mpfr_set_zero (x, MPFR_SIGN_POS);
 }
 
 char *
@@ -79,12 +142,11 @@ real_read (mpfr_ptr y, const char *buf)
   char *s = NULL;
   mpfr_strtofr (y, buf, &s, base, mpfr_get_default_rounding_mode ());
 
-  while (isspace (*s))
-    s++;
+  skip_whitespace (&s);
 
   if (is_latin_alpha (*s) && !is_latin_alpha (*(s + 1)))
     {
-      if (*s == 'E')
+      if (*s == (base <= 10 ? 'E' : 'P'))
         {
           /* Exponent.  */
           s++;
@@ -119,8 +181,6 @@ real_write (char *buf, mpfr_srcptr x)
     }
   if (mpfr_inf_p (x))
     {
-      if (MPFR_IS_NEG (x))
-        *buf++ = '-';
       strcpy (buf, MPFR_IS_POS (x) ? "@Inf@" : "-@Inf@");
       return;
     }
@@ -129,18 +189,30 @@ real_write (char *buf, mpfr_srcptr x)
       if (MPFR_IS_NEG (x))
         *buf++ = '-';
       *buf++ = '0';
-      *buf = '\0';
       if (number_format == MODE_SCI)
         strcpy (buf, " E+0");
+      else
+        *buf = '\0';
       return;
     }
 
-  mp_prec_t prec = bits2digits (mpfr_get_default_prec ());
+  mp_prec_t prec = bits2digits (mpfr_get_default_prec () - 1);
 
 #if 0
+  mpfr_exp_t e;
+  char *s = mpfr_get_str (NULL, &e, base, prec, x, mpfr_get_default_rounding_mode ());
+  strcpy (buf, s);
+  puts (buf);
+  mpfr_free_str (s);
+
+  round_result (buf, prec, number_format == MODE_FIX);
+  puts (buf);
+  pretty_result (buf);
+#endif
+
   char *format = xmalloc (19 + 5 + 1); /* Max len of 64 signed number is 19.  */
 
-  mpfr_sprintf (format, "%%.%PuR*%c", prec >= 0 ? prec : 0, (char) number_format);
+  mpfr_sprintf (format, "%%.%PuR*%c", prec > 0 ? prec : 0, (char) number_format);
 
   if (mpfr_sprintf (buf, format, mpfr_get_default_rounding_mode (), x) < 0)
     die (EXIT_FAILURE, errno, _("failed to write buffer in function %s"), __func__);
@@ -148,11 +220,9 @@ real_write (char *buf, mpfr_srcptr x)
   free (format);
 
   round_result (buf, prec, number_format == MODE_FIX);
+  pretty_result (buf);
 
-  if (mpfr_integer_p (x))
-    pretty_result (buf);
-#endif
-
+#if 0
   mpfr_exp_t e;
   char *s = mpfr_get_str (NULL, &e, base, prec, x, mpfr_get_default_rounding_mode ());
 
@@ -183,11 +253,26 @@ real_write (char *buf, mpfr_srcptr x)
     }
 
   pretty_result (buf);
+#endif
 }
 mp_prec_t
 real_len (mpfr_srcptr x)
 {
-  return mpfr_get_prec (x) + 5;
+#if _DEBUG && 0
+  mp_prec_t len = bits2digits (mpfr_get_default_prec () + 32);
+  char *s = xmalloc (len + 100);
+  real_write (s, x);
+  printf ("len == %zi\nstrlen == %zu\n", len, strlen (s));
+  free (s);
+  return len;
+#else
+  return bits2digits (mpfr_get_default_prec ())
+    + 1 /* possible sign */
+    + 1 /* possible dot */
+    + 1 /* possible sign before exponent */
+    + 1 /* possible exponent char */
+    + 19 /* possible exponent number */;
+#endif
 }
 
 void
@@ -204,17 +289,17 @@ real_copy (mpfr_ptr y, mpfr_srcptr x)
 void
 real_neg (mpfr_ptr x)
 {
-  mpfr_neg (x, x, mpfr_get_default_rounding_mode ());
+  UNARY_FUNCTION_BODY (x, x, neg);
 }
 void
 real_abs (mpfr_ptr x)
 {
-  mpfr_abs (x, x, mpfr_get_default_rounding_mode ());
+  UNARY_FUNCTION_BODY (x, x, abs);
 }
 void
 real_sign (mpfr_ptr x)
 {
-  mpfr_set_si (x, mpfr_sgn (x), mpfr_get_default_rounding_mode ());
+  real_set_ui (x, mpfr_sgn (x));
 }
 
 void
@@ -270,6 +355,11 @@ real_mul (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
   BINARY_FUNCTION_BODY (y, a, b, mul);
 }
 void
+real_mul_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int n)
+{
+  BINARY_FUNCTION_BODY (y, x, n, mul_ui);
+}
+void
 real_div (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
   if (mpfr_zero_p (b))
@@ -281,6 +371,17 @@ real_div (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
   BINARY_FUNCTION_BODY (y, a, b, div);
 }
 void
+real_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int n)
+{
+  if (n == 0)
+    {
+      cerror (division_by_zero);
+      return;
+    }
+
+  BINARY_FUNCTION_BODY (y, x, n, div_ui);
+}
+void
 real_pow (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
   if (mpfr_zero_p (a))
@@ -290,14 +391,14 @@ real_pow (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
           cerror (zero_power_of_zero);
           return;
         }
-      if (mpfr_sgn (b) < 0)
+      if (MPFR_IS_NEG (b))
         {
           cerror (negative_power_of_zero);
           return;
         }
-      mpfr_set_ui(y, 0, mpfr_get_default_rounding_mode ());
+      real_set_zero (y);
     }
-  if (mpfr_sgn (a) < 0)
+  if (MPFR_IS_NEG (a))
     {
       if (!mpfr_integer_p (b))
         {
@@ -311,9 +412,86 @@ real_pow (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 void
 real_root (mpfr_ptr y, mpfr_srcptr b, mpfr_srcptr a)
 {
-  mpfr_rootn_ui (y, a,
-                 mpfr_get_ui (b, mpfr_get_default_rounding_mode ()),
-                 mpfr_get_default_rounding_mode ());
+  bool sign = MPFR_IS_NEG (a);
+  bool b_is_odd = false;
+  if (mpfr_zero_p (a))
+    {
+      if (MPFR_IS_NEG (b))
+        cerror (negative_root_of_zero);
+      else if (mpfr_zero_p (b))
+        cerror (zero_root_of_zero);
+      else
+        real_set_zero (y);
+      return;
+    }
+  if (sign)
+    {
+      if (!mpfr_integer_p (b))
+        {
+          cerror (not_integer_root_of_negative_number);
+          return;
+        }
+      else if (mpfr_fits_ulong_p (b, mpfr_get_default_rounding_mode ()))
+        {
+          if (mpfr_get_ui (b, mpfr_get_default_rounding_mode ()) % 2 == 0)
+            {
+              cerror (even_root_of_negative_number);
+              return;
+            }
+          else
+            b_is_odd = true;
+        }
+      else
+        {
+          mpfr_t t;
+          real_init (t);
+          real_div_ui (t, b, 2);
+          if (!mpfr_integer_p (t))
+            {
+              cerror (even_root_of_negative_number);
+              return;
+            }
+          else
+            b_is_odd = true;
+          real_clear (t);
+        }
+    }
+  if (mpfr_cmp_si (b, +2) == 0)
+    {
+      real_sqrt (y, a);
+      return;
+    }
+  if (mpfr_cmp_si (b, -2) == 0)
+    {
+      real_sqrt (y, a);
+      MPFR_CHANGE_SIGN (y);
+      return;
+    }
+  if (mpfr_cmp_si (b, +1) == 0)
+    {
+      real_copy (y, a);
+      return;
+    }
+  if (mpfr_cmp_si (b, -1) == 0)
+    {
+      real_inv (y, a);
+      return;
+    }
+
+  /* TODO!!! */
+  mpfr_t t, u;
+  real_init (t);
+  real_init (u);
+  real_copy (t, a);
+  if (MPFR_IS_NEG (t))
+    MPFR_CHANGE_SIGN (t);
+
+  real_ln (u, t);
+  real_div (t, u, b);
+  real_exp (y, t);
+
+  if (MPFR_IS_NEG (t) && b_is_odd)
+    MPFR_CHANGE_SIGN (y);
 }
 
 void
@@ -336,14 +514,11 @@ real_rsh (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
       return;
     }
 
-  mpfr_t tmp;
-  mpfr_init_set_ui (tmp, 2, mpfr_get_default_rounding_mode ());
-
-  mpfr_set_ui (y, 2, mpfr_get_default_rounding_mode ());
-  mpfr_pow (tmp, y, b, mpfr_get_default_rounding_mode ());
-  mpfr_div (y, a, tmp, mpfr_get_default_rounding_mode ());
-
-  mpfr_clear (tmp);
+  mpfr_t t;
+  real_init_set_ui (t, 2);
+  real_pow (t, t, b);
+  real_div (y, a, t);
+  real_clear (t);
 }
 void
 real_lsh (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
@@ -354,14 +529,11 @@ real_lsh (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
       return;
     }
 
-  mpfr_t tmp;
-  mpfr_init_set_ui (tmp, 2, mpfr_get_default_rounding_mode ());
-
-  mpfr_set_ui (y, 2, mpfr_get_default_rounding_mode ());
-  mpfr_pow (tmp, y, b, mpfr_get_default_rounding_mode ());
-  mpfr_mul (y, a, tmp, mpfr_get_default_rounding_mode ());
-
-  mpfr_clear (tmp);
+  mpfr_t t;
+  real_init_set_ui (t, 2);
+  real_pow (t, t, b);
+  real_mul (y, a, t);
+  real_clear (t);
 }
 
 void
@@ -385,9 +557,9 @@ void
 real_inv (mpfr_ptr y, mpfr_srcptr x)
 {
   mpfr_t one;
-  mpfr_init_set_ui (one, 1, mpfr_get_default_rounding_mode ());
+  real_init_set_ui (one, 1);
   real_div (y, one, x);
-  mpfr_clear (one);
+  real_clear (one);
 }
 
 /* Trigonometric functions.  */
@@ -441,20 +613,16 @@ real_atan (mpfr_ptr y, mpfr_srcptr x)
 void
 real_atan2 (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
+  BINARY_FUNCTION_BODY (y, a, b, atan2);
 }
 void
 real_acot (mpfr_ptr y, mpfr_srcptr x)
 {
-  mpfr_t t;
-  mpfr_init2 (t, mpfr_get_prec (x));
-  real_inv (t, x);
-
-  mpfr_atan (y, t, mpfr_get_default_rounding_mode ());
-
-  mpfr_clear (t);
+  real_inv (y, x);
+  real_atan (y, y);
 }
 
-// Hyperbolic functions
+/* Hyperbolic functions.  */
 void
 real_sinh (mpfr_ptr y, mpfr_srcptr x)
 {
@@ -480,7 +648,21 @@ real_coth (mpfr_ptr y, mpfr_srcptr x)
 void
 real_fact (mpfr_ptr y, mpfr_srcptr x)
 {
+  if (!mpfr_fits_ulong_p (x, mpfr_get_default_rounding_mode ()))
+    {
+      cerror (overflow);
+      return;
+    }
 
+  unsigned long int n = mpfr_get_ui (x, mpfr_get_default_rounding_mode ());
+  if (n <= 1)
+    {
+      real_set_zero (y);
+      return;
+    }
+
+  mpfr_fac_ui (y, mpfr_get_ui (x, mpfr_get_default_rounding_mode ()),
+               mpfr_get_default_rounding_mode ());
 }
 void
 real_ffact (mpfr_ptr y, mpfr_srcptr x)
@@ -501,16 +683,16 @@ real_subfact (mpfr_ptr y, mpfr_srcptr x)
     }
 
   mpfr_t t, u, one;
-  mpfr_inits (t, u, NULL);
-  mpfr_init_set_ui (one, 1, mpfr_get_default_rounding_mode ());
+  mpfr_inits (t, u, (mpfr_ptr) 0);
 
+  real_init_set_ui (one, 1);
   real_fact (t, x);
   real_exp (u, one);
   real_div (y, t, u);
   real_round (y);
+  real_clear (one);
 
-  mpfr_clear (one);
-  mpfr_clears (u, t, NULL);
+  mpfr_clears (u, t, (mpfr_ptr) 0);
 }
 void
 real_primorial (mpfr_ptr y, mpfr_srcptr x)
@@ -520,6 +702,23 @@ real_primorial (mpfr_ptr y, mpfr_srcptr x)
 void
 real_gcd (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
+  if (!mpfr_integer_p (a) || !mpfr_integer_p (b))
+    {
+      cerror (gcd_of_real_numbers);
+      return;
+    }
+
+  mpfr_t t;
+  real_init_set_ui (t, 1);
+  if (mpfr_cmpabs (a, t) == 0 || mpfr_cmpabs (b, t) == 0)
+    {
+      mpfr_set_ui (y, 1, mpfr_get_default_rounding_mode ());
+      return;
+    }
+
+
+
+  MPFR_SIGN (y) = MPFR_SIGN_POS;
 }
 void
 real_lcm (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
@@ -527,25 +726,59 @@ real_lcm (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 }
 
 void
+real_mod (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
+{
+  if (mpfr_zero_p (b))
+    {
+      cerror (division_by_zero);
+      return;
+    }
+  if (!mpfr_integer_p (a) || !mpfr_integer_p (b))
+    {
+      cerror (modulo_division_by_non_integer_number);
+      return;
+    }
+  if (mpfr_equal_p (a, b))
+    {
+      real_set_zero (y);
+      return;
+    }
+
+  mpfr_sign_t sign = MPFR_SIGN (b);
+
+  mpfr_t t;
+  real_init (t);
+  real_div (t, a, b);
+  real_floor (t);
+  real_mul (t, t, b);
+  real_sub (y, a, t);
+  real_clear (t);
+
+  MPFR_SIGN (y) = sign;
+}
+
+void
 real_fibonacci (mpfr_ptr y, mpfr_srcptr x)
 {
   mpfr_t t, u, v, s, one;
 
-  mpfr_inits (t, u, v, s, one, NULL);
-  mpfr_set_ui (t, 5, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (one, 1, mpfr_get_default_rounding_mode ());
-  real_sqrt(s, t);
-  real_add(t, s, one);
-  mpfr_div_ui (t, t, 2, mpfr_get_default_rounding_mode ());
-  real_pow(u, t, x);
-  real_sub(t, one, s);
-  mpfr_div_ui (t, t, 2, mpfr_get_default_rounding_mode ());
-  real_pow(v, t, x);
-  real_sub(t, u, v);
-  real_div(y, t, s);
-  real_round(y);
+  /* Если точность х * 2, то работает нормально.  */
+  mpfr_inits2 (bits2digits (mpfr_get_default_prec ()) * 2, t, u, v, s, one, (mpfr_ptr) 0);
 
-  mpfr_clears (one, s, v, u, t, NULL);
+  real_set_ui (t, 5);
+  real_set_ui (one, 1);
+  real_sqrt (s, t);
+  real_add (t, s, one);
+  real_div_ui (t, t, 2);
+  real_pow (u, t, x);
+  real_sub (t, one, s);
+  real_div_ui (t, t, 2);
+  real_pow (v, t, x);
+  real_sub (t, u, v);
+  real_div (y, t, s);
+  real_round (y);
+
+  mpfr_clears (one, s, v, u, t, (mpfr_ptr) 0);
 }
 
 // tribonacci(x)
@@ -558,19 +791,19 @@ real_tribonacci (mpfr_ptr y, mpfr_srcptr x)
 {
   mpfr_t c2r33, c1, c2, c3, c4, c1d3, c19, c102, c586;
   mpfr_t a1, a2, b, t, u, r;
-  mpfr_inits (c2r33, c1, c2, c3, c4, c1d3, c19, c102, c586, a1, a2, b, t, u, r, NULL);
+  real_inits (c2r33, c1, c2, c3, c4, c1d3, c19, c102, c586, a1, a2, b, t, u, r, (mpfr_ptr) 0);
 
-  mpfr_set_ui (t, 33, mpfr_get_default_rounding_mode ());
-  mpfr_sqrt (c2r33, t, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c1, 1, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c2, 2, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c3, 3, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c4, 4, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c1d3, 1, mpfr_get_default_rounding_mode ());
-  mpfr_div_ui (c1d3, c1d3, 3, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c19,  19, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c102, 102, mpfr_get_default_rounding_mode ());
-  mpfr_set_ui (c586, 586, mpfr_get_default_rounding_mode ());
+  real_set_ui (t, 33);
+  real_sqrt (c2r33, t);
+  real_set_ui (c1, 1);
+  real_set_ui (c2, 2);
+  real_set_ui (c3, 3);
+  real_set_ui (c4, 4);
+  real_set_ui (c1d3, 1);
+  real_div_ui (c1d3, c1d3, 3);
+  real_set_ui (c19,  19);
+  real_set_ui (c102, 102);
+  real_set_ui (c586, 586);
 
   // a1 = (19 + 3 * sqrt(33))^(1 / 3)
   real_mul (t, c3, c2r33);
@@ -608,38 +841,38 @@ real_tribonacci (mpfr_ptr y, mpfr_srcptr x)
   // round(y)
   real_round (y);
 
-  mpfr_clears (c2r33, c1, c2, c3, c4, c1d3, c19, c102, c586, a1, a2, b, t, u, r, NULL);
+  real_clears (c2r33, c1, c2, c3, c4, c1d3, c19, c102, c586, a1, a2, b, t, u, r, (mpfr_ptr) 0);
 }
 
 void
 real_equal (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
-  mpfr_set_ui (y, mpfr_equal_p (a, b) ? 1 : 0, mpfr_get_default_rounding_mode ());
+  real_set_ui (y, mpfr_equal_p (a, b) ? 1 : 0);
 }
 void
 real_not_equal (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
-  mpfr_set_ui (y, !mpfr_equal_p (a, b) ? 1 : 0, mpfr_get_default_rounding_mode ());
+  real_set_ui (y, !mpfr_equal_p (a, b) ? 1 : 0);
 }
 void
 real_less (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
-  mpfr_set_ui (y, mpfr_less_p (a, b) ? 1 : 0, mpfr_get_default_rounding_mode ());
+  real_set_ui (y, mpfr_less_p (a, b) ? 1 : 0);
 }
 void
 real_less_equal (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
-  mpfr_set_ui (y, mpfr_lessequal_p (a, b) ? 1 : 0, mpfr_get_default_rounding_mode ());
+  real_set_ui (y, mpfr_lessequal_p (a, b) ? 1 : 0);
 }
 void
 real_greater (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
-  mpfr_set_ui (y, mpfr_greater_p (a, b) ? 1 : 0, mpfr_get_default_rounding_mode ());
+  real_set_ui (y, mpfr_greater_p (a, b) ? 1 : 0);
 }
 void
 real_greater_equal (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 {
-  mpfr_set_ui (y, mpfr_greaterequal_p (a, b) ? 1 : 0, mpfr_get_default_rounding_mode ());
+  real_set_ui (y, mpfr_greaterequal_p (a, b) ? 1 : 0);
 }
 
 void
@@ -652,16 +885,16 @@ real_not (mpfr_ptr y, mpfr_srcptr x)
     }
 
   mpfr_t one;
-  mpfr_init_set_ui (one, 1, mpfr_get_default_rounding_mode ());
+  real_init_set_ui (one, 1);
 
-  if (MPFR_IS_NEG (x) && !mpfr_zero_p (x))
-    real_sub (y, x, one);
-  else
+  if (MPFR_IS_POS (x) || mpfr_zero_p (x))
     real_add (y, x, one);
+  else
+    real_sub (y, x, one);
 
   MPFR_CHANGE_SIGN (y);
 
-  mpfr_clear (one);
+  real_clear (one);
 }
 
 void
@@ -670,4 +903,28 @@ angle_result (mpfr_ptr x)
   if (angle_mode == ANGLE_RAD)
     return;
   error (0, 0, "implement me");
+}
+
+void
+const_pi (mpfr_ptr x)
+{
+  CONST_FUNCTION_BODY (x, const_pi);
+}
+void
+const_e (mpfr_ptr x)
+{
+  mpfr_t one;
+  real_init_set_ui (one, 1);
+  real_exp (x, one);
+  real_clear (one);
+}
+void
+const_y (mpfr_ptr x)
+{
+  CONST_FUNCTION_BODY (x, const_euler);
+}
+void
+const_catalan (mpfr_ptr x)
+{
+  CONST_FUNCTION_BODY (x, const_catalan);
 }

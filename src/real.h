@@ -7,6 +7,15 @@
 
 #include "system.h"
 
+void real_init (mpfr_ptr x);
+void real_inits (mpfr_ptr x, ...);
+void real_clear (mpfr_ptr x);
+void real_clears (mpfr_ptr x, ...);
+void real_set_si (mpfr_ptr x, signed long int n);
+void real_set_ui (mpfr_ptr x, unsigned long int n);
+void real_init_set_si (mpfr_ptr x, signed long int n);
+void real_init_set_ui (mpfr_ptr x, unsigned long int n);
+void real_set_zero (mpfr_ptr x);
 char *real_read (mpfr_ptr y, const char *buf);
 void real_write (char *buf, mpfr_srcptr x);
 mp_prec_t real_len (mpfr_srcptr x);
@@ -27,9 +36,13 @@ int real_cmpabs (mpfr_srcptr a, mpfr_srcptr b);
 void real_add (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b);
 void real_sub (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b);
 void real_mul (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b);
+void real_mul_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int n);
 void real_div (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b);
+void real_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int n);
 void real_pow (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b);
 void real_root (mpfr_ptr y, mpfr_srcptr b, mpfr_srcptr a);
+
+void real_inv (mpfr_ptr y, mpfr_srcptr x);
 
 void real_sqrt (mpfr_ptr y, mpfr_srcptr x);
 void real_cbrt (mpfr_ptr y, mpfr_srcptr x);
@@ -86,6 +99,11 @@ void real_not (mpfr_ptr y, mpfr_srcptr x);
 
 void angle_result (mpfr_ptr x);
 
-typedef void (*real_func1_t) (mpfr_ptr x);
-typedef void (*real_func2_t) (mpfr_ptr y, mpfr_srcptr x);
-typedef void (*real_func3_t) (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b);
+void const_pi (mpfr_ptr x);
+void const_e (mpfr_ptr x);
+void const_y (mpfr_ptr x);
+void const_catalan (mpfr_ptr x);
+
+typedef void (*real_const_function_t) (mpfr_ptr x);
+typedef void (*real_unary_function_t) (mpfr_ptr y, mpfr_srcptr x);
+typedef void (*real_binary_function_t) (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b);
