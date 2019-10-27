@@ -56,6 +56,9 @@ m4_syscmd([test "${GNULIB_POSIXCHECK+set}" = set])
 m4_if(m4_sysval, [0], [], [dnl
 gl_ASSERT_NO_GNULIB_POSIXCHECK])
 
+
+AM_PROG_LEX
+AC_PROG_YACC
 AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_INSTALL
@@ -71,8 +74,8 @@ AC_CHECK_LIB(gmp, __gmpz_init, ,
 AC_CHECK_LIB(mpfr, mpfr_init2, ,
   [AC_MSG_NOTICE([MPFR not found, see https://www.mpfr.org/])])
 
-AC_CHECK_LIB(mpc, mpc_init2, ,
-  [AC_MSG_NOTICE([MPC not found, see https://www.multiprecision.org/mpc/])])
+#AC_CHECK_LIB(mpc, mpc_init2, ,
+#  [AC_MSG_NOTICE([MPC not found, see https://www.multiprecision.org/mpc/])])
 
 AC_CHECK_LIB(pthread, pthread_create, ,
   [AC_MSG_NOTICE([pthread not found])])

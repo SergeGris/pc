@@ -51,5 +51,6 @@ MOSTLYCLEANDIRS =
 AM_CPPFLAGS = -Ilib -I$(top_srcdir)/lib -Isrc -I$(top_srcdir)/src -Isrc/thread -I$(top_srcdir)/src/thread
 
 include $(top_srcdir)/lib/local.mk
+#include $(top_srcdir)/src/parser/local.mk
 include $(top_srcdir)/src/thread/local.mk
 include $(top_srcdir)/src/local.mk

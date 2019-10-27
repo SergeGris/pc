@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -33,7 +34,9 @@
 
 #include "real.h"
 #include "complex.h"
+#include "stack.h"
 #include "util.h"
+#include "parse.h"
 
 #include "die.h"
 #include "long-options.h"
@@ -68,7 +71,7 @@ static const struct option long_options[] =
   {"version", no_argument, NULL, VERSION_OPTION},
   {NULL, 0, NULL, '\0'}
 };
-const char *const short_options = "a:e:m:p:r:o:";
+const char *const short_options = "a:e:m:p:r:i:o:";
 
 void
 usage (int status)
@@ -78,96 +81,345 @@ usage (int status)
   exit (status);
 }
 
-enum
+void
+pc_help (void)
 {
- TOK_ADD,
- TOK_SUB,
- TOK_MUL,
- TOK_DIV,
- TOK_SIN,
- TOK_COS,
- TOK_PI,
- TOK_E,
- TOK_Y,
- TOK_CATALAN
-};
+  puts ("TODO");
+}
+void
+pc_warranty (void)
+{
+  fputs ("\
+\n\
+    Copyright (C) 2019 Sergey Sushilin\n\
+\n\
+    This program is free software: you can redistribute it and/or modify\n\
+    it under the terms of the GNU General Public License as published by\n\
+    the Free Software Foundation, version 3.\n\
+\n\
+    This program is distributed in the hope that it will be useful,\n\
+    but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
+    GNU General Public License for more details.\n\
+\n\
+    You should have received a copy of the GNU General Public License\n\
+    along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.\n\
+\n\
+", stdout);
+}
 
-typedef struct builtin
+void
+pc_prec (mpfr_srcptr new_prec)
+{
+  mp_prec_t p;
+  if (mpfr_fits_slong_p (new_prec, mpfr_get_default_rounding_mode ())
+      && (p = real_get_si (new_prec)) > 0)
+    mpfr_set_default_prec (digits2bits (p + 1));
+  else
+    error (0, 0, _("invalid precision"));
+}
+
+void
+pc_base (mpfr_ptr new_base)
+{
+  unsigned int b;
+  if (mpfr_fits_slong_p (new_base, mpfr_get_default_rounding_mode ())
+      && (b = real_get_si (new_base)) > 0 && b < 62)
+    base = b;
+  else
+    error (0, 0, _("invalid base"));
+}
+
+_Noreturn void
+pc_exit (void)
+{
+  exit (0);
+}
+
+void
+pc_print (mpfr_srcptr x)
+{
+  char *s = xmalloc (real_len (x));
+  real_write (s, x);
+  puts (s);
+  free (s);
+}
+
+mpfr_t ans;
+void
+pc_ans (mpfr_ptr x)
+{
+  real_copy (x, ans);
+}
+
+typedef struct
+{
+  char *name;
+  mpfr_t val;
+} variable_t;
+
+struct stack variables[1];
+size_t
+get_variable_id (const char *name)
+{
+  if (!is_empty (variables))
+    for (size_t i = 0; i < variables->n_used; i++)
+      {
+        variable_t *var = ((variable_t *) stack_at (variables, i));
+        if (var != NULL && strcmp (var->name, name) == 0)
+          return i;
+      }
+  return -1;
+}
+void
+variables_destructor (void *p)
+{
+  variable_t *v = p;
+  free (v->name);
+  real_clear (v->val);
+}
+
+typedef struct
 {
   const char *name;
   void *func;
-  unsigned long int n_args;
-  unsigned long int tok;
-} builtin_t;
-builtin_t builtins[] =
+  size_t n_args; /* Number of mpfr_*ptr arguments.  */
+  bool print_result;
+} function_t;
+function_t functions[] =
 {
-  {"+", real_add, 2, TOK_ADD},
-  {"-", real_sub, 2, TOK_SUB},
-  {"*", real_mul, 2, TOK_MUL},
-  {"/", real_div, 2, TOK_DIV},
-  {"sin", real_sin, 1, TOK_SIN},
-  {"cos", real_cos, 1, TOK_COS},
-  {"pi", const_pi, 0, TOK_PI},
-  {"e", const_e, 0, TOK_E},
-  {"y", const_y, 0, TOK_Y},
-  {"catalan", const_catalan, 0, TOK_CATALAN}
+  {"help", pc_help, 0, false},
+  {"warranty", pc_warranty, 0, false},
+  {"prec", pc_prec, 1, false},
+  {"exit", pc_exit, 0, false},
+
+  {"set", NULL, 2, false},
+  {"=", NULL, 2, false},
+
+  {"print", pc_print, 1, false},
+  {"ans", pc_ans, 1, true},
+
+  {"+", real_add, 3, true},
+  {"-", real_sub, 3, true},
+  {"*", real_mul, 3, true},
+  {"/", real_div, 3, true},
+  {"pow", real_pow, 3, true},
+  {"root", real_root, 3, true},
+  {"exp", real_exp, 2, true},
+  {"round", real_round, 1, true},
+  {"ceil", real_ceil, 1, true},
+  {"floor", real_floor, 1, true},
+  {"trunc", real_trunc, 1, true},
+  {"frac", real_frac, 1, true},
+  {"sin", real_sin, 2, true},
+  {"cos", real_cos, 2, true},
+  {"tan", real_tan, 2, true},
+  {"cot", real_cot, 2, true},
+
+  {"fact", real_fact, 2, true},
+  {"ffact", real_ffact, 2, true},
+  {"subfact", real_subfact, 2, true},
+
+  {"pi", const_pi, 1, true},
+  {"tau", const_tau, 1, true},
+  {"e", const_e, 1, true},
+  {"y", const_y, 1, true},
+  {"catalan", const_catalan, 1, true},
+  {"", NULL, 0, false}
 };
+const char first_letters_of_functions[] = "hwpes=pa+-*/prercftfsctcffspteyc";
+
+size_t
+get_function_id (const char *function_name)
+{
+  const char *s = first_letters_of_functions;
+  char *e = strchr (s, *function_name);
+  if (e != NULL && *function_name != '\0')
+    do
+      if (strcmp (functions[e - s].name + 1, function_name + 1) == 0)
+        return e - s;
+    while ((e = strchr (e + 1, *function_name)) != NULL);
+
+  return -1;
+}
+
+void
+interrupt_handler (int sig)
+{
+  (void) sig;
+
+  int saved_errno = errno;
+  char msg[] = "\nuse 'exit' to quit\n";
+  write (STDOUT_FILENO, msg, sizeof (msg) - 1);
+  if (signal (SIGINT, interrupt_handler) == SIG_ERR)
+    error (0, errno, "SIGINT");
+  errno = saved_errno;
+}
 
 void
 main_loop (void)
 {
+#if _DEBUG
+  assert (sizeof (first_letters_of_functions) == countof (functions));
+  for (size_t i = 0; first_letters_of_functions[i] != '\0'; i++)
+    assert (first_letters_of_functions[i] == functions[i].name[0]);
+#endif
+
+  if (signal (SIGINT, interrupt_handler) == SIG_ERR)
+    error (0, errno, "SIGINT");
+
   rl_bind_key ('\t', rl_insert);
+
+  stack_init (variables, variables_destructor);
+
+  mpfr_t a[3];
+  real_inits (ans, a[0], a[1], a[2], (mpfr_ptr) 0);
+  mp_prec_t prec = mpfr_get_default_prec ();
+
+  yyparse ();
 
   while (true)
     {
       char *response = readline (NULL);
 
       /* If the line has any text in it, save it on the history.  */
-      if (response != NULL && *response != '\0')
-        add_history (response);
-
-      //      printf ("%zu\n%zu\n", malloc_usable_size (response), strlen (response));
-      //      strip_spaces (&response);
-      //      printf ("%zu\n%zu\n", malloc_usable_size (response), strlen (response));
-
-      char delims[] = " \t\v\n\r\f";
-      char *r = strtok (response, delims);
-      for (size_t i = 0; i < countof (builtins); i++)
+      if (response != NULL)
         {
-          builtin_t cur = builtins[i];
-          if (strcmp (cur.name, r) == 0)
+          if (*response == '\0')
+            goto lcontinue;
+          add_history (response);
+        }
+      else
+        break;
+
+      if (prec != mpfr_get_default_prec ())
+        {
+          prec = mpfr_get_default_prec ();
+          mpfr_set_prec (a[0], prec);
+          mpfr_set_prec (a[1], prec);
+          mpfr_set_prec (a[2], prec);
+          mpfr_set_prec (ans, prec);
+        }
+
+      strip_extra_spaces (&response);
+
+      if (strcmp (response, "exit") == 0)
+        pc_exit ();
+
+      if (*response != '(')
+        {
+          error (0, 0, "expected '('");
+          goto lcontinue;
+        }
+      char *r = strtok (response + 1, " ");
+
+      if (r == NULL)
+        goto lcontinue;
+
+      if (r[strlen (r) - 1] == ')')
+        r[strlen (r) - 1] = '\0';
+      size_t fid = get_function_id (r);
+      if (fid == (size_t) -1)
+        {
+          free (response);
+          cerror (unknown_function);
+          break;
+        }
+      function_t cur = functions[fid];
+
+      for (size_t j = 0; j < cur.n_args; j++)
+        {
+          r = strtok (NULL, " ");
+          if (r != NULL)
             {
-              mpfr_t a[2];
-              real_inits (a[0], a[1], (mpfr_ptr) 0);
-
-              for (unsigned long int j = 0; j < cur.n_args; j++)
-                real_read (a[j], strtok (NULL, delims) ? : "0");
-              switch (cur.n_args)
+              if (strcmp (functions[fid].name, "set") != 0
+                       && strcmp (functions[fid].name, "=") != 0)
                 {
-                case (unsigned long int) -1:
-                  cur.func ();
-                  break;
-                case 0:
-                  ((real_const_function_t) cur.func) (a[0]);
-                  break;
-                case 1:
-                  ((real_unary_function_t) cur.func) (a[0], a[0]);
-                  break;
-                case 2:
-                  ((real_binary_function_t) cur.func) (a[0], a[0], a[1]);
-                  break;
-                default:
-                  die (EXIT_FAILURE, 0, "unknow count of arguments");
+                  if (is_latin_alpha (*r))
+                    {
+                      size_t f;
+                      if ((f = get_function_id (r)) != (size_t) -1 && functions[f].n_args == 1)
+                        ((real_const_function_t) functions[f].func) (a[j]);
+                      if ((f = get_variable_id (r)) != (size_t) -1)
+                        real_copy (a[j], ((variable_t *) stack_at (variables, f))->val);
+                    }
+                  else
+                    {
+                      char *s = real_read (a[j], r);
+                      if (j == cur.n_args - 2 && *skip_spaces (s) != ')' && *((r = strtok (NULL, " ")) != NULL ? r : "") != ')')
+                        {
+                          error (0, 0, "expected ')'");
+                          goto lcontinue;
+                        }
+                    }
                 }
+              else
+                {
+                  size_t f = get_function_id (r);
+                  size_t v = get_variable_id (r);
+                  if ((f != (size_t) -1 && functions[f].n_args == 1) || v != (size_t) -1)
+                    {
+                      error (0, 0, "conflicting name of variable");
+                      goto lcontinue;
+                    }
+                  variable_t var;
+                  var.name = xstrdup (r);
+                  r = strtok (NULL, " ");
+                  if (r == NULL)
+                    {
+                      error (0, 0, "expected number");
+                      goto lcontinue;
+                    }
+                  real_init (var.val);
+                  r = real_read (var.val, r);
+                  stack_push (variables, &var);
+                  //                  printf ("%zu\n%s\n", (v = get_variable_id (var.name)), ((variable_t *) stack_at (variables, v))->name);
+                }
+            }
+          else
+            real_set_zero (a[j]);
+        }
+      if (cur.func != NULL)
+        switch (cur.n_args)
+          {
+          case 0:
+            ((void (*) (void)) cur.func) ();
+            break;
+          case 1:
+            ((real_const_function_t) cur.func) (a[0]);
+            break;
+          case 2:
+            ((real_unary_function_t) cur.func) (a[0], a[0]);
+            break;
+          case 3:
+            ((real_binary_function_t) cur.func) (a[0], a[0], a[1]);
+            break;
+          default:
+            die (EXIT_FAILURE, 0, "unknow count of arguments");
+          }
 
+      if (cur.print_result)
+        {
+#if __STDC_VERSION__ >= 201112L
+          if (cerrno == 0)
+#else
+          if (__atomic_load_n (&cerrno, __ATOMIC_SEQ_CST) == 0)
+#endif
+            {
+              real_copy (ans, a[0]);
               char *s = xmalloc (real_len (a[0]));
               real_write (s, a[0]);
               puts (s);
               free (s);
-
-              real_clears (a[1], a[0], (mpfr_ptr) 0);
-              break;
             }
+        }
+      else
+        {
+#if __STDC_VERSION__ >= 201112L
+          cerrno = 0;
+#else
+          __atomic_store_n (&cerrno, 0, __ATOMIC_SEQ_CST);
+#endif
         }
 
       //      puts (response);
@@ -177,18 +429,27 @@ main_loop (void)
       /* parse (response);
          calc (); */
 
+    lcontinue:
+      real_set_zero (a[0]);
+      real_set_zero (a[1]);
+      real_set_zero (a[2]);
+
       free (response);
     }
+
+  real_clears (a[2], a[1], a[0], ans, (mpfr_ptr) 0);
 }
 
 mpfr_rnd_t
 string2rounding (const char *s)
 {
-  if (strncasecmp (s, "RND", 3) == 0)
+  if (toupper (*(s + 0)) == 'R'
+      && toupper (*(s + 1)) == 'N'
+      && toupper (*(s + 2)) == 'D'
+      && *(s + 3) != '\0')
     {
       s += 3;
-      size_t len = strlen (s);
-      if (len == 1)
+      if (*(s + 1) == '\0')
         {
           switch (toupper (*s))
             {
@@ -214,7 +475,9 @@ string2rounding (const char *s)
               break;
             }
         }
-      if (len == 2 && toupper (*s) == 'N' && toupper (*(s + 1)) == 'A')
+      else if (toupper (*(s + 0)) == 'N'
+               && toupper (*(s + 1)) == 'A'
+               && *(s + 2) == '\0')
         /* Round to nearest, with ties away from zero.  */
         return MPFR_RNDNA;
     }
@@ -233,9 +496,8 @@ redirect (const char *filename, int flags, mode_t mode, int destfd)
     return fd;
 
   error (0, errno, "%s", quotef (filename));
-  if (fd >= 0)
-    if (close (fd) != 0)
-      error (0, errno, "%s", quotef (filename));
+  if (fd < 0)
+    error (0, errno, "%s", quotef (filename));
 
   return -1;
 }
@@ -246,10 +508,17 @@ static int interactive = -1;
 static void
 parse_options (int argc, char **argv)
 {
-  mpfr_set_default_prec (digits2bits (100 + 1));
-  mpfr_set_default_rounding_mode (MPFR_RNDN);
+  /* Readline support.  Set both application name and input file.  */
+  rl_readline_name = PROGRAM_NAME;
+  rl_instream = stdin;
+
+  using_history ();
+
+  mpfr_set_default_prec (digits2bits (42 + 1));
+  mpfr_set_default_rounding_mode (MPFR_RNDNA);
+
   int optc;
-  while ((optc = getopt_long (argc, argv, short_options, long_options, NULL)) != -1)
+  while ((optc = getopt_long (argc, argv, short_options, long_options, NULL)) > 0)
     switch (optc)
       {
       case 'e':
@@ -289,23 +558,25 @@ parse_options (int argc, char **argv)
         interactive = 0;
         break;
       case 'i':
-        /* TODO */
+        yyin = rl_instream = fopen (optarg, "r");
+        if (rl_instream == NULL)
+          die (EXIT_FAILURE, errno, "cannot open file %s", quoteaf (optarg));
         break;
       case HELP_OPTION:
         usage (EXIT_SUCCESS);
       case VERSION_OPTION:
         printf ("%s %s\n", PROGRAM_NAME, VERSION);
-        printf ("Copyright © %i Sergey Sushilin.\n", COPYRIGHT_YEAR);
+        printf ("Copyright © %s Sergey Sushilin.\n", COPYRIGHT_YEAR);
         fputs (_("\
 \n\
-License GNU General Public License version 3 <https://gnu.org/licenses/gpl-3.0.htmpl>.\n\
+License GNU General Public License version 3 <https://gnu.org/licenses/gpl-3.0.html>.\n\
 This is free software: you are free to change and redistribute it.\n\
 There is NO WARRANTY, to the extent permitted by law.\n\
 \n\
 "), stdout);
         const char *const authors[] = { AUTHORS, NULL };
         size_t n_authors = countof (authors) - 1;
-        static_assert (countof (authors) >= 2 /* NULL we count too.  */, "n_authors < 1");
+        verify (countof (authors) >= 1 + 1 /* NULL we count too.  */);
 
         if (n_authors == 1)
           printf (_("Written by %s.\n"), authors[0]);
@@ -348,17 +619,13 @@ main (int argc, char **argv)
 
   parse_options (argc, argv);
 
-  if (interactive)
+  //  if (interactive)
     {
-      /* Readline support.  Set both application name and input file.  */
-      rl_readline_name = PROGRAM_NAME;
-      rl_instream = stdin;
-      using_history ();
 
-      puts ("This is free software with ABSOLUTELY NO WARRANTY.");
-      printf ("For more details type %s.\n", quote ("warranty"));
+      //      puts ("This is free software with ABSOLUTELY NO WARRANTY.");
+      //      printf ("For more details type %s.\n", quote ("warranty"));
     }
-
+#if 0
   mpfr_t n;
   real_init (n);
   real_set_si (n, -1);
@@ -373,6 +640,20 @@ main (int argc, char **argv)
   if (cerrno == 0)
     puts (s);
   free (s);
+#endif
+
+#if _DEBUG
+  verify (sizeof (first_letters_of_functions) == countof (functions));
+  for (size_t i = 0; first_letters_of_functions[i] != '\0'; i++)
+    assert (first_letters_of_functions[i] == functions[i].name[0]);
+#endif
+
+  if (signal (SIGINT, interrupt_handler) == SIG_ERR)
+    error (0, errno, "SIGINT");
+
+  rl_bind_key ('\t', rl_insert);
+
+  return yyparse ();
 
   //mpfr_out_str (stdout, 10, 0, x, mpfr_get_default_rounding_mode ());
   //  complex_write (s = malloc (complex_len (n)), n);
@@ -385,8 +666,7 @@ main (int argc, char **argv)
 
   //  complex_read (x, s);
   //  puts (s);
-  if (interactive)
-    main_loop ();
+  main_loop ();
 
   return 0;
 }

@@ -13,6 +13,8 @@ void real_clear (mpfr_ptr x);
 void real_clears (mpfr_ptr x, ...);
 void real_set_si (mpfr_ptr x, signed long int n);
 void real_set_ui (mpfr_ptr x, unsigned long int n);
+signed long int real_get_si (mpfr_srcptr x);
+unsigned long int real_get_ui (mpfr_srcptr x);
 void real_init_set_si (mpfr_ptr x, signed long int n);
 void real_init_set_ui (mpfr_ptr x, unsigned long int n);
 void real_set_zero (mpfr_ptr x);
@@ -100,6 +102,7 @@ void real_not (mpfr_ptr y, mpfr_srcptr x);
 void angle_result (mpfr_ptr x);
 
 void const_pi (mpfr_ptr x);
+void const_tau (mpfr_ptr x);
 void const_e (mpfr_ptr x);
 void const_y (mpfr_ptr x);
 void const_catalan (mpfr_ptr x);

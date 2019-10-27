@@ -32,9 +32,6 @@ __BEGIN_DECLS
 
 #ifndef __cplusplus
 # define thread_local _Thread_local
-# ifndef __GNUC__
-#  define __thread _Thread_local
-# endif
 #endif
 
 /* Attribute to indicate thread creation was issued from C11 thread_create.  */
@@ -169,7 +166,7 @@ extern int thread_sleep (const struct timespec *__time_point,
 
 /* Terminate current thread execution, cleaning up any thread local
    storage and freeing resources.  Returns the value specified in __RES.  */
-extern _Noreturn void thread_exit (int __res);
+extern void thread_exit (int __res) __attribute__ ((__noreturn__));
 
 /* Detach the thread identified by __THR from the current environment
    (it does not allow join or wait for it).  */

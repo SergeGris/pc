@@ -7,7 +7,11 @@
 #include <ctype.h>
 #include <stddef.h>
 #include <math.h>
+#include <unistd.h>
 
+#include "die.h"
+#include "verify.h"
+#include "quote.h"
 #include "xalloc.h"
 
 #include "system.h"
@@ -124,8 +128,8 @@ pretty_result (char *buf)
   if (!use_separator1 && !use_separator2)
     return;
 
-  aminmax (separator_freq1, 1, 10000);
-  aminmax (separator_freq2, 1, 10000);
+  aminmax (separator_freq1, 1u, 10000u);
+  aminmax (separator_freq2, 1u, 10000u);
 
   f1 = separator_freq1;
   f2 = separator_freq2;
@@ -149,7 +153,7 @@ pretty_result (char *buf)
   if (*s == '.')
     s++;
   b2 = s;
-  for (; *s && *s != ' '; s++)
+  for (; *s != '\0' && *s != ' '; s++)
     ;
   e2 = s;
   n1 = (ptrdiff_t) (e1 - b1);
@@ -182,7 +186,7 @@ pretty_result (char *buf)
   if (b2 != e1)
     *--d = *--s;
   i = use_separator1 ? f1 + 1 : 0;
-  for (; s > b1;)
+  while (s > b1)
     {
       if (--i == 0)
         {
@@ -203,8 +207,6 @@ digits2bits (mp_prec_t digits)
 {
   static_assert (sizeof (mp_prec_t) >= sizeof (double),
                  "sizeof (mp_prec_t) < sizeof (double)");
-  static_assert ((mp_prec_t)(double) LLONG_MAX == (mp_prec_t) LLONG_MAX,
-                 "(mp_prec_t)(double) LLONG_MAX != (mp_prec_t) LLONG_MAX");
 
   return (mp_prec_t) ceil ((double) digits * 3.321928094887362347870);
 }
@@ -213,10 +215,12 @@ bits2digits (mp_prec_t bits)
 {
   static_assert (sizeof (mp_prec_t) >= sizeof (double),
                  "sizeof (mp_prec_t) < sizeof (double)");
+
 #if _DEBUG
   mp_prec_t MPPREC_MAX = LONG_MAX;
   double DBL_MAX = LONG_MAX;
-  assert (MPPREC_MAX == (mp_prec_t) DBL_MAX);
+  mp_prec_t DBL_MAX_TO_MP_PREC_T = DBL_MAX;
+  assert (MPPREC_MAX == DBL_MAX_TO_MP_PREC_T);
 #endif
 
   return (mp_prec_t) floor ((double) bits * 0.301029995663981195214);
@@ -228,39 +232,60 @@ skip_whitespace (char **s)
   while (isspace ((unsigned char) **s))
     (*s)++;
 }
+const char *
+skip_spaces (const char *s)
+{
+  while (isspace ((unsigned char) *s))
+    s++;
+  return s;
+}
+
+verify (UCHAR_MAX <= 0400);
+
+static bool is_latin[0400] =
+{
+  ['A' ... 'Z'] = true,
+  ['a' ... 'z'] = true,
+};
 
 bool
-is_latin_alpha (int c)
+is_latin_alpha (unsigned char c)
 {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+  return is_latin[c];
 }
 
 void
-strip_spaces (char **s)
+strip_extra_spaces (char **s)
 {
+  if (*s == NULL)
+    return;
+
   unsigned char *result = *s;
-  size_t i = 0, j = 0;
+  size_t i = 0;
 
   while (isspace (result[i]))
     i++;
+  if (result[i] == '\0')
+    {
+      result[0] = '\0';
+      *s = xrealloc (result, 1);
+      return;
+    }
 
-  for (; i < strlen (result); i++)
+  size_t j;
+  for (j = 0; i < strlen (result); i++)
     if (!isspace (result[i]))
       result[j++] = result[i];
-    else if (!isspace (result[j - 1]))
+    else if (result[j - 1] != ' ' && result[j + 1] != '\0')
       result[j++] = ' ';
-
-  if (result[j - 1] == ' ')
-    result[--j] = '\0';
-  else
-    result[j] = '\0';
+  result[j] = '\0';
 
   *s = xrealloc (result, j);
 }
 
 static const char *pc_errors[] =
 {
-  [0] = "cerrno == 0",
+  [0] = "success",
 #define SET(i, s) [i] = s
 # include "errors.def"
 #undef SET
@@ -271,12 +296,110 @@ cerror (unsigned int id)
 {
   assert (id < countof (pc_errors));
 
+#if __STDC_VERSION__ >= 201112L
   if (cerrno != 0 || id == 0)
-   return;
-
+    return;
   cerrno = id;
+#else
+  if (__atomic_load_n (&cerrno, __ATOMIC_SEQ_CST) != 0 || id == 0)
+    return;
+  __atomic_store_n (&cerrno, id, __ATOMIC_SEQ_CST);
+#endif
 
   error (0, 0, "%u: %s", id, pc_errors[id]);
 }
 
 #undef __OUTPUT_ERROR_TEXT__
+
+/*
+ * Safe strncpy, the result is always a valid
+ * NUL-terminated string that fits in the buffer
+ * (unless, of course, the buffer size is zero).
+ */
+size_t
+strlcpy (char *dst, const char *src, size_t len)
+{
+  size_t ret = strlen (src);
+
+  if (len != 0)
+    {
+      size_t n = (ret >= len) ? len - 1 : ret;
+      memcpy (dst, src, n);
+      dst[n] = '\0';
+    }
+
+  return ret;
+}
+
+/* The standard yyerror routine.  Built with variable number of argumnets. */
+void
+yyerror (const char *str, ...)
+{
+  const char *name;
+  va_list args;
+
+  va_start (args, str);
+
+  if (yyin == stdin)
+    name = "(standard input)";
+  else
+    name = file_name;
+
+  error (0, 0, "%s: %d: ", name, line_no);
+  vfprintf (stderr, str, args);
+  fputc ('\n', stderr);
+  checkferror_output (stderr);
+
+#if __STDC_VERSION__ >= 201112L
+  yyerrno = 1;
+#else
+  __atomic_store_n (&yyerrno, 1, __ATOMIC_SEQ_CST);
+#endif
+
+  va_end (args);
+}
+
+/* check ferror() status and if so die.  */
+void
+checkferror_input (FILE *fp)
+{
+  if (ferror (fp))
+    die (EXIT_FAILURE, errno, "could not read input file");
+}
+void
+checkferror_output (FILE *fp)
+{
+  if (ferror (fp))
+    die (EXIT_FAILURE, errno, "could not write output file");
+}
+
+void
+welcome (void)
+{
+  printf ("\
+This is free software with ABSOLUTELY NO WARRANTY.\n\
+For more details type %s.\n\
+", quote ("warranty"));
+}
+
+void
+warranty (void)
+{
+  fputs ("\
+\n\
+    Copyright (C) " COPYRIGHT_YEAR " Sergey Sushilin\n\
+\n\
+    This program is free software: you can redistribute it and/or modify\n\
+    it under the terms of the GNU General Public License as published by\n\
+    the Free Software Foundation, version 3.\n\
+\n\
+    This program is distributed in the hope that it will be useful,\n\
+    but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
+    GNU General Public License for more details.\n\
+\n\
+    You should have received a copy of the GNU General Public License\n\
+    along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.\n\
+\n\
+", stdout);
+}

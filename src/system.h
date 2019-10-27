@@ -4,8 +4,7 @@
 
     BrainFuck Compiler is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
-    published by the Free Software Foundation, either version 3 of
-    the License, or (at your option) any later version.
+    published by the Free Software Foundation, version 3
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -26,12 +25,6 @@
 
 #include <error.h>
 
-#include <stdint.h>
-typedef  int32_t i32;
-typedef  int64_t i64;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
 #include <errno.h>
 
 /* Some systems do not define this; POSIX mentions it but says it is
@@ -42,6 +35,135 @@ typedef uint64_t u64;
 #endif
 
 #include <stdbool.h>
+
+/*** From GCC source code ***/
+#include <stdio.h>
+
+/* NOTE: pc is multi-threaded program, but threads used only in thread_loop,
+   no reason to use the locking function in another functions in pc.
+
+   HAVE_DECL_PUTC_UNLOCKED actually indicates whether or not the stdio
+   code is multi-thread safe by default.  If it is set to 0, then do
+   not worry about using the _unlocked functions.
+
+   fputs_unlocked, fwrite_unlocked, and fprintf_unlocked are
+   extensions and need to be prototyped by hand (since we do not
+   define _GNU_SOURCE).  */
+
+#if defined(HAVE_DECL_PUTC_UNLOCKED) && HAVE_DECL_PUTC_UNLOCKED != 0
+# if defined(HAVE_PUTC_UNLOCKED)
+#  undef putc
+#  define putc(c, stream) putc_unlocked (c, stream)
+# endif
+# if defined(HAVE_PUTCHAR_UNLOCKED)
+#  undef putchar
+#  define putchar(c) putchar_unlocked (c)
+# endif
+# if defined(HAVE_GETC_UNLOCKED)
+#  undef getc
+#  define getc(stream) getc_unlocked (stream)
+# endif
+# if defined(HAVE_GETCHAR_UNLOCKED)
+#  undef getchar
+#  define getchar() getchar_unlocked ()
+# endif
+# if defined(HAVE_FPUTC_UNLOCKED)
+#  undef fputc
+#  define fputc(c, stream) fputc_unlocked (c, stream)
+# endif
+
+# if defined(HAVE_FEOF_UNLOCKED)
+#  undef feof
+#  define feof(stream) feof_unlocked (stream)
+#  if defined(HAVE_DECL_FEOF_UNLOCKED) && HAVE_DECL_FEOF_UNLOCKED == 0
+extern int feof_unlocked (FILE *);
+#  endif
+# endif
+# if defined(HAVE_FILENO_UNLOCKED)
+#  undef fileno
+#  define fileno(stream) fileno_unlocked (stream)
+#  if defined (HAVE_DECL_FILENO_UNLOCKED) && HAVE_DECL_FILENO_UNLOCKED == 0
+extern int fileno_unlocked (FILE *);
+#  endif
+# endif
+# if defined(HAVE_FFLUSH_UNLOCKED)
+#  undef fflush
+#  define fflush(stream) fflush_unlocked (stream)
+#  if defined (HAVE_DECL_FFLUSH_UNLOCKED) && HAVE_DECL_FFLUSH_UNLOCKED == 0
+extern int fflush_unlocked (FILE *);
+#  endif
+# endif
+# if defined(HAVE_FGETC_UNLOCKED)
+#  undef fgetc
+#  define fgetc(stream) fgetc_unlocked (stream)
+#  if defined(HAVE_DECL_FGETC_UNLOCKED) && HAVE_DECL_FGETC_UNLOCKED == 0
+extern int fgetc_unlocked (FILE *);
+#  endif
+# endif
+# if defined(HAVE_FGETS_UNLOCKED)
+#  undef fgets
+#  define fgets(s, n, stream) fgets_unlocked (s, n, stream)
+#  if defined(HAVE_DECL_FGETS_UNLOCKED) && HAVE_DECL_FGETS_UNLOCKED == 0
+extern char *fgets_unlocked (char *, int, FILE *);
+#  endif
+# endif
+# if defined(HAVE_PUTS_UNLOCKED)
+#  undef puts
+#  define puts(string) puts_unlocked (string)
+#  if defined(HAVE_DECL_PUTS_UNLOCKED) && HAVE_DECL_PUTS_UNLOCKED == 0
+extern int puts_unlocked (const char *);
+#  endif
+# endif
+# if defined(HAVE_FPUTS_UNLOCKED)
+#  undef fputs
+#  define fputs(string, stream) fputs_unlocked (string, stream)
+#  if defined(HAVE_DECL_FPUTS_UNLOCKED) && HAVE_DECL_FPUTS_UNLOCKED == 0
+extern int fputs_unlocked (const char *, FILE *);
+#  endif
+# endif
+# if defined(HAVE_FERROR_UNLOCKED)
+#  undef ferror
+#  define ferror(stream) ferror_unlocked (stream)
+#  if defined(HAVE_DECL_FERROR_UNLOCKED) && HAVE_DECL_FERROR_UNLOCKED == 0
+extern int ferror_unlocked (FILE *);
+#  endif
+# endif
+# if defined(HAVE_FREAD_UNLOCKED)
+#  undef fread
+#  define fread(ptr, size, n, stream) fread_unlocked (ptr, size, n, stream)
+#  if defined(HAVE_DECL_FREAD_UNLOCKED) && HAVE_DECL_FREAD_UNLOCKED == 0
+extern size_t fread_unlocked (void *, size_t, size_t, FILE *);
+#  endif
+# endif
+# if defined(HAVE_FWRITE_UNLOCKED)
+#  undef fwrite
+#  define fwrite(ptr, size, n, stream) fwrite_unlocked (ptr, size, n, stream)
+#  if defined(HAVE_DECL_FWRITE_UNLOCKED) && HAVE_DECL_FWRITE_UNLOCKED == 0
+extern size_t fwrite_unlocked (const void *, size_t, size_t, FILE *);
+#  endif
+# endif
+
+# if defined(HAVE_PRINTF_UNLOCKED)
+#  undef printf
+/* We cannot use a function-like macro here because we do not know if
+   we have varargs macros.  */
+#  define printf printf_unlocked
+#  if defined(HAVE_DECL_PRINTF_UNLOCKED) && HAVE_DECL_PRINTF_UNLOCKED == 0
+extern int printf_unlocked (FILE *, const char *, ...);
+#  endif
+# endif
+# if defined(HAVE_FPRINTF_UNLOCKED)
+#  undef fprintf
+#  define fprintf fprintf_unlocked
+#  if defined(HAVE_DECL_FPRINTF_UNLOCKED) && HAVE_DECL_FPRINTF_UNLOCKED == 0
+extern int fprintf_unlocked (FILE *, const char *, ...);
+#  endif
+# endif
+
+#endif
+
+/*** ***/
+
 #include <stdlib.h>
 #define EXIT_TROUBLE 2
 
@@ -114,10 +236,6 @@ select_plural (uintmax_t n)
 
 /* Check for errors on write.  */
 #include "closeout.h"
-
-#define emit_bug_reporting_address unused__emit_bug_reporting_address
-#include "version-etc.h"
-#undef emit_bug_reporting_address
 
 #include "propername.h"
 /* Define away proper_name (leaving proper_name_utf8, which affects far
@@ -243,8 +361,8 @@ select_plural (uintmax_t n)
 #define aminmax(x, l, h) \
   do \
     { \
-      typeof (l) __L__ = l;\
-      typeof (h) __H__ = h; \
+      typeof (l) __L__ = (l); \
+      typeof (h) __H__ = (h); \
       if ((x) > (__H__)) \
         (x) = (__H__); \
       if ((x) < (__L__)) \

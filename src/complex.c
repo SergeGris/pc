@@ -125,12 +125,12 @@ complex_write (char *buf, mpc_srcptr x)
 {
   real_write (buf, mpc_realref (x));
 
-  if (mpfr_zero_p (mpc_imagref (x)))
+  if (MPFR_IS_ZERO (mpc_imagref (x)))
     return;
   buf = strchr (buf, '\0');
 
   *buf++ = ' ';
-  *buf++ = (mpfr_sgn (mpc_imagref (x)) > 0 ? '+' : '-');
+  *buf++ = (MPFR_IS_POS (mpc_imagref (x)) ? '+' : '-');
   *buf++ = ' ';
 
   real_write (buf, mpc_imagref (x));
@@ -246,11 +246,11 @@ complex_div (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 void
 complex_pow (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 {
-  if (mpfr_zero_p (mpc_realref (a)) && mpfr_zero_p (mpc_imagref (a)))
+  if (MPFR_IS_ZERO (mpc_realref (a)) && MPFR_IS_ZERO (mpc_imagref (a)))
     {
-      if (!mpfr_zero_p (mpc_imagref (b)))
+      if (!MPFR_IS_ZERO (mpc_imagref (b)))
         cerror (complex_power_of_zero);
-      else if (mpfr_zero_p (mpc_realref (b)))
+      else if (MPFR_IS_ZERO (mpc_realref (b)))
         cerror (zero_power_of_zero);
       else if (mpfr_cmp_ui (mpc_realref (b), 0) < 0)
         cerror (negative_power_of_zero);
@@ -264,11 +264,11 @@ complex_pow (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 void
 complex_root (mpc_ptr y, mpc_srcptr b, mpc_srcptr a)
 {
-  if (mpfr_zero_p (mpc_realref (a)) && mpfr_zero_p (mpc_imagref (a)))
+  if (MPFR_IS_ZERO (mpc_realref (a)) && MPFR_IS_ZERO (mpc_imagref (a)))
     {
-      if (!mpfr_zero_p (mpc_imagref (b)))
+      if (!MPFR_IS_ZERO (mpc_imagref (b)))
         cerror (complex_root_of_zero);
-      else if (mpfr_zero_p (mpc_realref (b)))
+      else if (MPFR_IS_ZERO (mpc_realref (b)))
         cerror (zero_root_of_zero);
       else
         complex_set_zero (y);
@@ -289,9 +289,9 @@ complex_root (mpc_ptr y, mpc_srcptr b, mpc_srcptr a)
 void
 complex_sqrt (mpc_ptr y, mpc_srcptr x)
 {
-  if (mpfr_zero_p (mpc_imagref (x)))
+  if (MPFR_IS_ZERO (mpc_imagref (x)))
     {
-      if (mpfr_sgn (mpc_realref (x)) < 0)
+      if (MPFR_IS_NEG (mpc_realref (x)))
         {
           real_copy (mpc_realref (y), mpc_realref (x));
           real_neg (mpc_realref (y));
@@ -306,7 +306,7 @@ complex_sqrt (mpc_ptr y, mpc_srcptr x)
     }
   else
     {
-      if (mpfr_zero_p (mpc_realref (x)))
+      if (MPFR_IS_ZERO (mpc_realref (x)))
         {
           /* sqrt(bi) = sqrt(b / 2) + i * sqrt(b / 2) */
           real_div_ui (mpc_imagref (y), mpc_imagref (x), 2);
@@ -342,7 +342,7 @@ complex_cbrt (mpc_ptr y, mpc_srcptr x)
 void
 complex_rsh (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 {
-  if (!mpfr_zero_p (mpc_imagref (b)) || !mpfr_zero_p (mpc_imagref (b)))
+  if (!MPFR_IS_ZERO (mpc_imagref (b)) || !MPFR_IS_ZERO (mpc_imagref (b)))
     {
       cerror (shift_operand_is_not_integer);
       return;
@@ -353,7 +353,7 @@ complex_rsh (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 void
 complex_lsh (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 {
-  if (!mpfr_integer_p (mpc_realref (b)) || !mpfr_zero_p (mpc_imagref (b)))
+  if (!mpfr_integer_p (mpc_realref (b)) || !MPFR_IS_ZERO (mpc_imagref (b)))
     {
       cerror (shift_operand_is_not_integer);
       return;

@@ -11,4 +11,8 @@ unsigned int
 
 char separator1 = '\'', separator2 = '.';
 
-atomic_uint cerrno = 0;
+#if __STDC_VERSION__ >= 201112L
+atomic_uint cerrno = 0, yyerrno = 0;
+#else
+unsigned int cerrno = 0, yyerrno = 0;
+#endif
