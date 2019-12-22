@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <math.h>
-#include <malloc.h>
 #include <unistd.h>
 
 #include <readline/readline.h>

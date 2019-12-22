@@ -1034,23 +1034,23 @@ realis_rem (mpfr_ptr y, mpfr_srcptr a, mpfr_srcptr b)
 void
 realis_fibonacci (mpfr_ptr y, mpfr_srcptr x)
 {
-  mpfr_t t, u, v, s;
+  if (MPFR_IS_NEG (x))
+    {
+      cerror (function_does_not_support_negative);
+      return;
+    }
+  if (!mpfr_integer_p (x))
+    {
+      cerror (function_does_not_support_fractional);
+      return;
+    }
+  if (!mpfr_fits_ulong_p (x, mpfr_get_default_rounding_mode ()))
+    {
+      cerror (overflow);
+      return;
+    }
 
-  mpfr_inits (t, u, v, s, (mpfr_ptr) 0);
-
-  realis_set_ui (t, 5);
-  realis_sqrt (s, t);
-  realis_add_ui (t, s, 1);
-  realis_div_ui (t, t, 2);
-  realis_pow (u, t, x);
-  realis_ui_sub (t, 1, s);
-  realis_div_ui (t, t, 2);
-  realis_pow (v, t, x);
-  realis_sub (t, u, v);
-  realis_div (y, t, s);
-  realis_round (y, y);
-
-  mpfr_clears (s, v, u, t, (mpfr_ptr) 0);
+  UNARY_FUNCTION_BODY_ZI (y, realis_get_ui (x), fib_ui);
 }
 
 // tribonacci(x)
