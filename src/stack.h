@@ -5,19 +5,17 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef void (*stack_dtor_t) (void *);
-
 struct stack
 {
   void **sp;
   size_t n_used;
   size_t n_alloc;
-  stack_dtor_t dtor;
+  void (*dtor) (void *);
 };
 
 bool is_empty (struct stack *s);
 
-void stack_init (struct stack *s, stack_dtor_t dtor);
+void stack_init (struct stack *s, void (*dtor) (void *));
 void stack_push (struct stack *s, void *data);
 void *stack_pop (struct stack *s);
 void *stack_peek (struct stack *s);

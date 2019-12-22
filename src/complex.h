@@ -1,10 +1,13 @@
 
+#ifndef _COMPLEX_H
+#define _COMPLEX_H 1
+
 #include <mpc.h>
 
 #include <stdbool.h>
 
 #include "pc.h"
-#include "real.h"
+#include "realis.h"
 
 #include "system.h"
 
@@ -15,8 +18,8 @@ void complex_set_ui (mpc_ptr x, unsigned long int n);
 void complex_init_set_si (mpc_ptr x, signed long int n);
 void complex_init_set_ui (mpc_ptr x, unsigned long int n);
 char *complex_read (mpc_ptr y, const char *buf);
-void complex_write (char *buf, mpc_srcptr x);
-mp_prec_t complex_len (mpc_srcptr x);
+char *complex_write (char *buf, mpc_srcptr x);
+mpfr_prec_t complex_len (mpc_srcptr x);
 void complex_copy (mpc_ptr y, mpc_srcptr x);
 void complex_imag_suffix (mpc_ptr y, mpc_srcptr x);
 void complex_neg (mpc_ptr x);
@@ -89,3 +92,7 @@ void complex_less (mpc_ptr y, mpc_srcptr a, mpc_srcptr b);
 void complex_less_equal (mpc_ptr y, mpc_srcptr a, mpc_srcptr b);
 void complex_greater (mpc_ptr y, mpc_srcptr a, mpc_srcptr b);
 void complex_greater_equal (mpc_ptr y, mpc_srcptr a, mpc_srcptr b);
+
+extern mpc_t c_one;
+
+#endif /* _COMPLEX_H */

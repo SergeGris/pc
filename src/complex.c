@@ -3,20 +3,23 @@
 
 #include <mpc.h>
 
-#include "real.h"
+#include "realis.h"
 #include "complex.h"
 #include "util.h"
 
 #include "system.h"
 
-#define UNARY_FUNCTION_BODY(y, x, func)                                 \
-  do                                                                    \
-    mpc_##func (y, x, mpfr_get_default_rounding_mode ());               \
+mpc_t c_one;
+mpc_ptr one = c_one;
+
+#define UNARY_FUNCTION_BODY(y, x, func) \
+  do \
+    mpc_##func (y, x, mpfr_get_default_rounding_mode ()); \
   while (0)
 
-#define BINARY_FUNCTION_BODY(y, a, b, func)                             \
-  do                                                                    \
-    mpc_##func (y, a, b, mpfr_get_default_rounding_mode ());            \
+#define BINARY_FUNCTION_BODY(y, a, b, func) \
+  do \
+    mpc_##func (y, a, b, mpfr_get_default_rounding_mode ()); \
   while (0)
 
 void
@@ -41,138 +44,95 @@ map3 (mpc_ptr y, mpc_srcptr a, mpc_srcptr b, void (*f) (mpfr_ptr, mpfr_srcptr, m
 void
 complex_init (mpc_ptr x)
 {
-  map1 (x, real_init);
+  map1 (x, realis_init);
 }
 void
 complex_clear (mpc_ptr x)
 {
-  map1 (x, real_clear);
+  map1 (x, realis_clear);
 }
 void
 complex_set_si (mpc_ptr x, signed long int n)
 {
-  real_set_si (mpc_realref (x), n);
-  real_set_zero (mpc_imagref (x));
+  realis_set_si (mpc_realref (x), n);
+  realis_set_zero (mpc_imagref (x));
 }
 void
 complex_set_ui (mpc_ptr x, unsigned long int n)
 {
-  real_set_ui (mpc_realref (x), n);
-  real_set_zero (mpc_imagref (x));
+  realis_set_ui (mpc_realref (x), n);
+  realis_set_zero (mpc_imagref (x));
 }
 void
 complex_init_set_si (mpc_ptr x, signed long int n)
 {
-  real_init_set_si (mpc_realref (x), n);
-  real_init_set_si (mpc_imagref (x), 0);
+  realis_init_set_si (mpc_realref (x), n);
+  realis_init_set_si (mpc_imagref (x), 0);
 }
 void
 complex_init_set_ui (mpc_ptr x, unsigned long int n)
 {
-  real_init_set_ui (mpc_realref (x), n);
-  real_init_set_ui (mpc_imagref (x), 0);
+  realis_init_set_ui (mpc_realref (x), n);
+  realis_init_set_ui (mpc_imagref (x), 0);
 }
 void
 complex_set_zero (mpc_ptr x)
 {
-  map1 (x, real_set_zero);
+  map1 (x, realis_set_zero);
 }
 
 char *
-complex_read (mpc_ptr x, const char *buf)
-{
-  char *s = real_read (mpc_realref (x), buf);
-
-  skip_whitespace (&s);
-
-  if (*s != '\0' && *s != '+' && *s != '-' && *s != 'i')
-    {
-      error (0, 0, "failed to read im part");
-      return s;
-    }
-  bool read_real = *s == 'i';
-
-  if (read_real)
-    mpfr_swap (mpc_realref (x), mpc_imagref (x));
-
-  skip_whitespace (&s);
-
-  bool sign = (*s == '-');
-
-  if (!read_real && *s == 'i')
-    {
-      s++;
-      skip_whitespace (&s);
-      if (!isdigit (*s))
-        goto error;
-      s = real_read (mpc_imagref (x), s);
-    }
-  else if (isdigit (*s))
-    {
-      s = real_read (mpc_imagref (x), s);
-      skip_whitespace (&s);
-      if (*s != 'i')
-        goto error;
-    }
-  MPFR_SIGN (mpc_imagref (x)) = sign;
-  return s;
-error:
-  error (0, 0, "failed to read imagine part");
-  return NULL;
-}
-void
 complex_write (char *buf, mpc_srcptr x)
 {
-  real_write (buf, mpc_realref (x));
+  buf = realis_write (buf, mpc_realref (x));
 
   if (MPFR_IS_ZERO (mpc_imagref (x)))
     return;
-  buf = strchr (buf, '\0');
 
   *buf++ = ' ';
   *buf++ = (MPFR_IS_POS (mpc_imagref (x)) ? '+' : '-');
   *buf++ = ' ';
 
-  real_write (buf, mpc_imagref (x));
-  buf = strchr (buf, '\0');
+  buf = realis_write (buf, mpc_imagref (x));
   *buf = 'i';
+
+  return buf;
 }
-mp_prec_t
+mpfr_prec_t
 complex_len (mpc_srcptr x)
 {
-  return real_len (mpc_realref (x)) + real_len (mpc_imagref (x)) + 6;
+  return realis_len (mpc_realref (x)) + realis_len (mpc_imagref (x)) + 6;
 }
 
 void
 complex_copy (mpc_ptr y, mpc_srcptr x)
 {
-  map2 (y, x, real_copy);
+  map2 (y, x, realis_copy);
 }
 
 void
 complex_imag_suffix (mpc_ptr y, mpc_srcptr x)
 {
-  real_copy (mpc_realref (y), mpc_imagref (x));
-  real_copy (mpc_imagref (y), mpc_realref (x));
-  real_neg (mpc_realref (y));
+  realis_neg (mpc_realref (y), mpc_imagref (x));
+  realis_copy (mpc_imagref (y), mpc_realref (x));
 }
 
 void
-complex_neg (mpc_ptr x)
+complex_neg (mpc_ptr y, mpc_srcptr x)
 {
-  map1 (x, real_neg);
+  map2 (y, x, realis_neg);
 }
 void
-complex_abs (mpc_ptr x)
+complex_abs (mpc_ptr y, mpc_srcptr x)
 {
-  map1 (x, real_abs);
+  map2 (y, x, realis_abs);
 }
 void
-complex_sign (mpc_ptr x)
+complex_sign (mpc_ptr y, mpc_srcptr x)
 {
   mpc_t c;
   mpfr_t f;
-  mp_prec_t pr, pi;
+  mpfr_prec_t pr, pi;
 
   mpc_get_prec2 (&pr, &pi, x);
   mpc_init2 (c, max (pr, pi));
@@ -187,29 +147,29 @@ complex_sign (mpc_ptr x)
 }
 
 void
-complex_round (mpc_ptr x)
+complex_round (mpc_ptr y, mpc_srcptr x)
 {
-  map1 (x, real_round);
+  map2 (y, x, realis_round);
 }
 void
-complex_ceil (mpc_ptr x)
+complex_ceil (mpc_ptr y, mpc_srcptr x)
 {
-  map1 (x, real_ceil);
+  map2 (y, x, realis_ceil);
 }
 void
-complex_floor (mpc_ptr x)
+complex_floor (mpc_ptr y, mpc_srcptr x)
 {
-  map1 (x, real_floor);
+  map2 (y, x, realis_floor);
 }
 void
-complex_trunc (mpc_ptr x)
+complex_trunc (mpc_ptr y, mpc_srcptr x)
 {
-  map1 (x, real_trunc);
+  map2 (y, x, realis_trunc);
 }
 void
-complex_frac (mpc_ptr x)
+complex_frac (mpc_ptr y, mpc_srcptr x)
 {
-  map1 (x, real_frac);
+  map2 (y, x, realis_frac);
 }
 
 int
@@ -241,6 +201,12 @@ complex_mul (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 void
 complex_div (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 {
+  if (MPFR_IS_ZERO (mpc_realref (b)) && MPFR_IS_ZERO (mpc_imagref (b)))
+    {
+      cerror (division_by_zero);
+      return;
+    }
+
   BINARY_FUNCTION_BODY (y, a, b, div);
 }
 void
@@ -293,15 +259,15 @@ complex_sqrt (mpc_ptr y, mpc_srcptr x)
     {
       if (MPFR_IS_NEG (mpc_realref (x)))
         {
-          real_copy (mpc_realref (y), mpc_realref (x));
-          real_neg (mpc_realref (y));
-          real_sqrt (mpc_imagref (y), mpc_realref (y));
-          real_set_zero (mpc_realref (y));
+          realis_copy (mpc_realref (y), mpc_realref (x));
+          realis_neg (mpc_realref (y));
+          realis_sqrt (mpc_imagref (y), mpc_realref (y));
+          realis_set_zero (mpc_realref (y));
         }
       else
         {
-          real_sqrt (mpc_realref (y), mpc_realref (x));
-          real_set_zero (mpc_imagref (y));
+          realis_sqrt (mpc_realref (y), mpc_realref (x));
+          realis_set_zero (mpc_imagref (y));
         }
     }
   else
@@ -309,26 +275,26 @@ complex_sqrt (mpc_ptr y, mpc_srcptr x)
       if (MPFR_IS_ZERO (mpc_realref (x)))
         {
           /* sqrt(bi) = sqrt(b / 2) + i * sqrt(b / 2) */
-          real_div_ui (mpc_imagref (y), mpc_imagref (x), 2);
-          real_abs (mpc_imagref (y));
-          real_sqrt (mpc_realref (y), mpc_imagref (y));
-          real_copy (mpc_imagref (y), mpc_realref (y));
+          realis_div_ui (mpc_imagref (y), mpc_imagref (x), 2);
+          realis_abs (mpc_imagref (y));
+          realis_sqrt (mpc_realref (y), mpc_imagref (y));
+          realis_copy (mpc_imagref (y), mpc_realref (y));
         }
       else
         {
-          complex_copy (y, x);
-          complex_abs (y);
+          complex_abs (y, x);
+
           mpfr_t t;
-          real_init (t);
+          realis_init (t);
 
-          real_sub (t, mpc_realref (y), mpc_realref (x));
-          real_div_ui (t, t, 2);
-          real_sqrt (mpc_imagref (y), t);
-          real_add (t, mpc_realref (y), mpc_realref (x));
-          real_div_ui (t, t, 2);
-          real_sqrt (mpc_realref (y), t);
+          realis_sub (t, mpc_realref (y), mpc_realref (x));
+          realis_div_ui (t, t, 2);
+          realis_sqrt (mpc_imagref (y), t);
+          realis_add (t, mpc_realref (y), mpc_realref (x));
+          realis_div_ui (t, t, 2);
+          realis_sqrt (mpc_realref (y), t);
 
-          real_clear (t);
+          realis_clear (t);
         }
       MPFR_SIGN (mpc_imagref (y)) = mpfr_sgn (mpc_imagref (x));
     }
@@ -342,13 +308,13 @@ complex_cbrt (mpc_ptr y, mpc_srcptr x)
 void
 complex_rsh (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
 {
-  if (!MPFR_IS_ZERO (mpc_imagref (b)) || !MPFR_IS_ZERO (mpc_imagref (b)))
+  if (MPFR_NOT_ZERO (mpc_imagref (b)) || MPFR_NOT_ZERO (mpc_imagref (b)))
     {
       cerror (shift_operand_is_not_integer);
       return;
     }
 
-  map3 (y, a, b, real_rsh);
+  map3 (y, a, b, realis_rsh);
 }
 void
 complex_lsh (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
@@ -359,18 +325,18 @@ complex_lsh (mpc_ptr y, mpc_srcptr a, mpc_srcptr b)
       return;
     }
 
-  map3 (y, a, b, real_lsh);
+  map3 (y, a, b, realis_lsh);
 }
 
 void
 complex_exp (mpc_ptr y, mpc_srcptr x)
 {
-  map2 (y, x, real_exp);
+  map2 (y, x, realis_exp);
 }
 void
 complex_ln (mpc_ptr y, mpc_srcptr x)
 {
-  map2 (y, x, real_ln);
+  map2 (y, x, realis_ln);
 }
 
 /* Trigonometric functions.  */
@@ -454,7 +420,8 @@ complex_tanh (mpc_ptr y, mpc_srcptr x)
 }
 void
 complex_coth (mpc_ptr y, mpc_srcptr x)
-{ /* TODO */
+{
+  /* TODO */
 }
 
 /* Factorials.  */

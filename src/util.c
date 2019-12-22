@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "die.h"
+#include "intprops.h"
 #include "verify.h"
 #include "quote.h"
 #include "xalloc.h"
@@ -19,10 +20,10 @@
 static const char digit_tab[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 void
-round_result (char *buf, mp_prec_t digits, bool fixed)
+round_result (char *buf, mpfr_prec_t digits, bool fixed)
 {
   char *s, *k, *dot;
-  mp_prec_t n;
+  mpfr_prec_t n;
   size_t i;
 
   if (*buf == '+' || *buf == '-')
@@ -202,62 +203,83 @@ pretty_result (char *buf)
  *   bits   = ceil (digits * log[2](10))
  *   digits = floor (bits * log[10](2))
  */
-mp_prec_t
-digits2bits (mp_prec_t digits)
+mpfr_prec_t
+digits2bits (mpfr_prec_t digits)
 {
-  static_assert (sizeof (mp_prec_t) >= sizeof (double),
-                 "sizeof (mp_prec_t) < sizeof (double)");
+  static_assert (sizeof (mpfr_prec_t) >= sizeof (double),
+                 "sizeof (mpfr_prec_t) < sizeof (double)");
 
-  return (mp_prec_t) ceil ((double) digits * 3.321928094887362347870);
+  return (mpfr_prec_t) ceil ((double) digits * 3.321928094887362347870);
 }
-mp_prec_t
-bits2digits (mp_prec_t bits)
+mpfr_prec_t
+bits2digits (mpfr_prec_t bits)
 {
-  static_assert (sizeof (mp_prec_t) >= sizeof (double),
-                 "sizeof (mp_prec_t) < sizeof (double)");
+  static_assert (sizeof (mpfr_prec_t) >= sizeof (double),
+                 "sizeof (mpfr_prec_t) < sizeof (double)");
 
-#if _DEBUG
-  mp_prec_t MPPREC_MAX = LONG_MAX;
-  double DBL_MAX = LONG_MAX;
-  mp_prec_t DBL_MAX_TO_MP_PREC_T = DBL_MAX;
-  assert (MPPREC_MAX == DBL_MAX_TO_MP_PREC_T);
+  return (mpfr_prec_t) floor ((double) bits * 0.301029995663981195214);
+}
+
+/* Find last (most-significant) set bit.  */
+static unsigned long int
+fls (unsigned long int x)
+{
+  return (sizeof (x) * CHAR_BIT) - 1 - __builtin_clzl (x);
+}
+
+#if ULONG_MAX == UINT64_MAX
+unsigned int
+fast_isqrt (unsigned long int n)
+{
+  unsigned long int b, m, y;
+  y = 0;
+  m = 1UL << (fls (n) & ~1UL);
+
+  while (m != 0)
+    {
+      b = y + m;
+      y >>= 1;
+      if (n >= b)
+        {
+          n -= b;
+          y += m;
+        }
+      m >>= 2;
+    }
+
+  return y;
+}
+#elif ULONG_MAX == UINT32_MAX
+unsigned int
+fast_isqrt (unsigned long int n)
+{
+  unsigned int x = (n / 0x3F + 0x3F) >> 1;
+  x = (n / x + x) >> 1;
+  x = (n / x + x) >> 1;
+  return x;
+}
 #endif
 
-  return (mp_prec_t) floor ((double) bits * 0.301029995663981195214);
+bool
+is_prime (unsigned long int n)
+{
+  for (unsigned long int i = 2; i <= fast_isqrt (n); i++)
+    if (n % i == 0)
+      return false;
+  return true;
 }
 
 void
-skip_whitespace (char **s)
+skip_whitespace (unsigned char **s)
 {
-  while (isspace ((unsigned char) **s))
+  while (isspace (**s))
     (*s)++;
-}
-const char *
-skip_spaces (const char *s)
-{
-  while (isspace ((unsigned char) *s))
-    s++;
-  return s;
-}
-
-verify (UCHAR_MAX <= 0400);
-
-static bool is_latin[0400] =
-{
-  ['A' ... 'Z'] = true,
-  ['a' ... 'z'] = true,
-};
-
-bool
-is_latin_alpha (unsigned char c)
-{
-  return is_latin[c];
 }
 
 void
 strip_extra_spaces (char **s)
 {
-  if (*s == NULL)
+  if (s == NULL || *s == NULL)
     return;
 
   unsigned char *result = *s;
@@ -274,10 +296,12 @@ strip_extra_spaces (char **s)
 
   size_t j;
   for (j = 0; i < strlen (result); i++)
-    if (!isspace (result[i]))
-      result[j++] = result[i];
-    else if (result[j - 1] != ' ' && result[j + 1] != '\0')
-      result[j++] = ' ';
+    {
+      if (!isspace (result[i]))
+        result[j++] = result[i];
+      else if (result[j - 1] != ' ' && result[j + 1] != '\0')
+        result[j++] = ' ';
+    }
   result[j] = '\0';
 
   *s = xrealloc (result, j);
@@ -285,7 +309,7 @@ strip_extra_spaces (char **s)
 
 static const char *pc_errors[] =
 {
-  [0] = "success",
+  [0] = "this message should not have been printed (cerrno == 0)",
 #define SET(i, s) [i] = s
 # include "errors.def"
 #undef SET
@@ -296,20 +320,74 @@ cerror (unsigned int id)
 {
   assert (id < countof (pc_errors));
 
-#if __STDC_VERSION__ >= 201112L
-  if (cerrno != 0 || id == 0)
+  if (__get_cerrno () != 0 || id == 0)
     return;
-  cerrno = id;
-#else
-  if (__atomic_load_n (&cerrno, __ATOMIC_SEQ_CST) != 0 || id == 0)
-    return;
-  __atomic_store_n (&cerrno, id, __ATOMIC_SEQ_CST);
-#endif
+  __set_cerrno (id);
 
   error (0, 0, "%u: %s", id, pc_errors[id]);
 }
 
-#undef __OUTPUT_ERROR_TEXT__
+void
+cerrorf (unsigned int id, const char *fmt, ...)
+{
+  assert (id < countof (pc_errors));
+  assert (fmt != NULL);
+
+  if (__get_cerrno () != 0 || id == 0)
+    return;
+  __set_cerrno (id);
+
+  const char *cerr = pc_errors[id];
+  va_list arg_ptr;
+  va_start (arg_ptr, fmt);
+
+  char *p = malloc (strlen (fmt) + INT_STRLEN_BOUND (unsigned int) + strlen (cerr) + sizeof (": : : \n"));
+  sprintf (p, "%s: %u: %s: %s\n", program_name, id, cerr, fmt);
+  vfprintf (stderr, p, arg_ptr);
+  free (p);
+
+  va_end (arg_ptr);
+}
+
+mpfr_rnd_t
+string2rounding (const char *s)
+{
+  if (*s != '\0')
+    {
+      if (*(s + 1) == '\0')
+        {
+          switch (toupper (*s))
+            {
+            case 'N':
+              /* Round to nearest, with ties to even.  */
+              return MPFR_RNDN;
+            case 'Z':
+              /* Round toward zero.  */
+              return MPFR_RNDZ;
+            case 'U':
+              /* Round toward +Inf.  */
+              return MPFR_RNDU;
+            case 'D':
+              /* Round toward -Inf.  */
+              return MPFR_RNDD;
+            case 'A':
+              /* Round away from zero.  */
+              return MPFR_RNDA;
+            case 'F':
+              /* Faithful rounding.  */
+              return MPFR_RNDF;
+            default:
+              break;
+            }
+        }
+      else if (strcasecmp (s, "NA") == 0)
+        /* Round to nearest, with ties away from zero.  */
+        return MPFR_RNDNA;
+    }
+
+  yyerror ("unknown mpfr rounding mode %s", quote (s));
+  return mpfr_get_default_rounding_mode ();
+}
 
 /*
  * Safe strncpy, the result is always a valid
@@ -317,69 +395,65 @@ cerror (unsigned int id)
  * (unless, of course, the buffer size is zero).
  */
 size_t
-strlcpy (char *dst, const char *src, size_t len)
+strlcpy (char *dst, const char *src, size_t n)
 {
-  size_t ret = strlen (src);
-
-  if (len != 0)
+  if (n != 0 && *src != '\0')
     {
-      size_t n = (ret >= len) ? len - 1 : ret;
-      memcpy (dst, src, n);
-      dst[n] = '\0';
+      size_t len = strnlen (src, n);
+      memcpy (dst, src, len);
+      dst[len] = '\0';
+      return len;
     }
-
-  return ret;
+  return 0;
 }
 
-/* The standard yyerror routine.  Built with variable number of argumnets. */
+/* The standard yyerror routine.  Built with variable number of argumnets.  */
 void
 yyerror (const char *str, ...)
 {
-  const char *name;
   va_list args;
 
   va_start (args, str);
-
-  if (yyin == stdin)
-    name = "(standard input)";
-  else
-    name = file_name;
-
-  error (0, 0, "%s: %d: ", name, line_no);
   vfprintf (stderr, str, args);
-  fputc ('\n', stderr);
-  checkferror_output (stderr);
-
-#if __STDC_VERSION__ >= 201112L
-  yyerrno = 1;
-#else
-  __atomic_store_n (&yyerrno, 1, __ATOMIC_SEQ_CST);
-#endif
-
   va_end (args);
-}
 
-/* check ferror() status and if so die.  */
-void
-checkferror_input (FILE *fp)
-{
-  if (ferror (fp))
-    die (EXIT_FAILURE, errno, "could not read input file");
-}
-void
-checkferror_output (FILE *fp)
-{
-  if (ferror (fp))
-    die (EXIT_FAILURE, errno, "could not write output file");
+  fputc ('\n', stderr);
+  if (ferror (stderr) != 0)
+    die (EXIT_FAILURE, errno, "stderr");
 }
 
 void
 welcome (void)
 {
-  printf ("\
-This is free software with ABSOLUTELY NO WARRANTY.\n\
-For more details type %s.\n\
-", quote ("warranty"));
+  puts ("This is free software with ABSOLUTELY NO WARRANTY.");
+  printf ("For more details type %s.\n", quote ("warranty"));
+}
+
+void
+version (void)
+{
+  printf ("%s %s\n", PROGRAM_NAME, VERSION);
+  fputs (_("\
+Copyright © "COPYRIGHT_YEAR" Sergey Sushilin.\n\
+\n\
+License GNU General Public License version 3 <https://gnu.org/licenses/gpl-3.0-standalone.html>.\n\
+This is free software: you are free to change and redistribute it.\n\
+There is NO WARRANTY, to the extent permitted by law.\n\
+\n\
+"), stdout);
+  const char *const authors[] = { AUTHORS, (const char *) 0 };
+  size_t n_authors = countof (authors) - 1;
+  verify (countof (authors) >= 1 + 1 /* NULL we count too.  */);
+
+  if (n_authors == 1)
+    printf (_("Written by %s.\n"), authors[0]);
+  else
+    {
+      fputs (_("Written by "), stdout);
+      for (size_t i = 0; i < n_authors - 1; i++)
+        printf ("%s,%c", authors[i], i % 3 == 0 ? '\n' : ' ');
+      printf (_("and %s.\n"), authors[n_authors - 1]);
+    }
 }
 
 void
@@ -387,19 +461,19 @@ warranty (void)
 {
   fputs ("\
 \n\
-    Copyright (C) " COPYRIGHT_YEAR " Sergey Sushilin\n\
+Copyright © "COPYRIGHT_YEAR" Sergey Sushilin\n\
 \n\
-    This program is free software: you can redistribute it and/or modify\n\
-    it under the terms of the GNU General Public License as published by\n\
-    the Free Software Foundation, version 3.\n\
+This program is free software: you can redistribute it and/or modify\n\
+it under the terms of the GNU General Public License as published by\n\
+the Free Software Foundation, version 3.\n\
 \n\
-    This program is distributed in the hope that it will be useful,\n\
-    but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
-    GNU General Public License for more details.\n\
+This program is distributed in the hope that it will be useful,\n\
+but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
+GNU General Public License for more details.\n\
 \n\
-    You should have received a copy of the GNU General Public License\n\
-    along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.\n\
+You should have received a copy of the GNU General Public License\n\
+along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0-standalone.html>.\n\
 \n\
 ", stdout);
 }

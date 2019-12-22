@@ -12,7 +12,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+    along with this program.  If not, see <http://www.gnu.org/licenses/gpl-3.0-standalone.html>.  */
 
 /* Include this file _after_ system headers if possible.  */
 
@@ -49,8 +49,7 @@
    fputs_unlocked, fwrite_unlocked, and fprintf_unlocked are
    extensions and need to be prototyped by hand (since we do not
    define _GNU_SOURCE).  */
-
-#if defined(HAVE_DECL_PUTC_UNLOCKED) && HAVE_DECL_PUTC_UNLOCKED != 0
+#if defined(HAVE_DECL_PUTC_UNLOCKED) && HAVE_DECL_PUTC_UNLOCKED
 # if defined(HAVE_PUTC_UNLOCKED)
 #  undef putc
 #  define putc(c, stream) putc_unlocked (c, stream)
@@ -75,70 +74,70 @@
 # if defined(HAVE_FEOF_UNLOCKED)
 #  undef feof
 #  define feof(stream) feof_unlocked (stream)
-#  if defined(HAVE_DECL_FEOF_UNLOCKED) && HAVE_DECL_FEOF_UNLOCKED == 0
+#  if defined(HAVE_DECL_FEOF_UNLOCKED) && !HAVE_DECL_FEOF_UNLOCKED
 extern int feof_unlocked (FILE *);
 #  endif
 # endif
 # if defined(HAVE_FILENO_UNLOCKED)
 #  undef fileno
 #  define fileno(stream) fileno_unlocked (stream)
-#  if defined (HAVE_DECL_FILENO_UNLOCKED) && HAVE_DECL_FILENO_UNLOCKED == 0
+#  if defined (HAVE_DECL_FILENO_UNLOCKED) && !HAVE_DECL_FILENO_UNLOCKED
 extern int fileno_unlocked (FILE *);
 #  endif
 # endif
 # if defined(HAVE_FFLUSH_UNLOCKED)
 #  undef fflush
 #  define fflush(stream) fflush_unlocked (stream)
-#  if defined (HAVE_DECL_FFLUSH_UNLOCKED) && HAVE_DECL_FFLUSH_UNLOCKED == 0
+#  if defined (HAVE_DECL_FFLUSH_UNLOCKED) && !HAVE_DECL_FFLUSH_UNLOCKED
 extern int fflush_unlocked (FILE *);
 #  endif
 # endif
 # if defined(HAVE_FGETC_UNLOCKED)
 #  undef fgetc
 #  define fgetc(stream) fgetc_unlocked (stream)
-#  if defined(HAVE_DECL_FGETC_UNLOCKED) && HAVE_DECL_FGETC_UNLOCKED == 0
+#  if defined(HAVE_DECL_FGETC_UNLOCKED) && !HAVE_DECL_FGETC_UNLOCKED
 extern int fgetc_unlocked (FILE *);
 #  endif
 # endif
 # if defined(HAVE_FGETS_UNLOCKED)
 #  undef fgets
 #  define fgets(s, n, stream) fgets_unlocked (s, n, stream)
-#  if defined(HAVE_DECL_FGETS_UNLOCKED) && HAVE_DECL_FGETS_UNLOCKED == 0
+#  if defined(HAVE_DECL_FGETS_UNLOCKED) && !HAVE_DECL_FGETS_UNLOCKED
 extern char *fgets_unlocked (char *, int, FILE *);
 #  endif
 # endif
 # if defined(HAVE_PUTS_UNLOCKED)
 #  undef puts
 #  define puts(string) puts_unlocked (string)
-#  if defined(HAVE_DECL_PUTS_UNLOCKED) && HAVE_DECL_PUTS_UNLOCKED == 0
+#  if defined(HAVE_DECL_PUTS_UNLOCKED) && !HAVE_DECL_PUTS_UNLOCKED
 extern int puts_unlocked (const char *);
 #  endif
 # endif
 # if defined(HAVE_FPUTS_UNLOCKED)
 #  undef fputs
 #  define fputs(string, stream) fputs_unlocked (string, stream)
-#  if defined(HAVE_DECL_FPUTS_UNLOCKED) && HAVE_DECL_FPUTS_UNLOCKED == 0
+#  if defined(HAVE_DECL_FPUTS_UNLOCKED) && !HAVE_DECL_FPUTS_UNLOCKED
 extern int fputs_unlocked (const char *, FILE *);
 #  endif
 # endif
 # if defined(HAVE_FERROR_UNLOCKED)
 #  undef ferror
 #  define ferror(stream) ferror_unlocked (stream)
-#  if defined(HAVE_DECL_FERROR_UNLOCKED) && HAVE_DECL_FERROR_UNLOCKED == 0
+#  if defined(HAVE_DECL_FERROR_UNLOCKED) && !HAVE_DECL_FERROR_UNLOCKED
 extern int ferror_unlocked (FILE *);
 #  endif
 # endif
 # if defined(HAVE_FREAD_UNLOCKED)
 #  undef fread
 #  define fread(ptr, size, n, stream) fread_unlocked (ptr, size, n, stream)
-#  if defined(HAVE_DECL_FREAD_UNLOCKED) && HAVE_DECL_FREAD_UNLOCKED == 0
+#  if defined(HAVE_DECL_FREAD_UNLOCKED) && !HAVE_DECL_FREAD_UNLOCKED
 extern size_t fread_unlocked (void *, size_t, size_t, FILE *);
 #  endif
 # endif
 # if defined(HAVE_FWRITE_UNLOCKED)
 #  undef fwrite
 #  define fwrite(ptr, size, n, stream) fwrite_unlocked (ptr, size, n, stream)
-#  if defined(HAVE_DECL_FWRITE_UNLOCKED) && HAVE_DECL_FWRITE_UNLOCKED == 0
+#  if defined(HAVE_DECL_FWRITE_UNLOCKED) && !HAVE_DECL_FWRITE_UNLOCKED
 extern size_t fwrite_unlocked (const void *, size_t, size_t, FILE *);
 #  endif
 # endif
@@ -147,15 +146,15 @@ extern size_t fwrite_unlocked (const void *, size_t, size_t, FILE *);
 #  undef printf
 /* We cannot use a function-like macro here because we do not know if
    we have varargs macros.  */
-#  define printf printf_unlocked
-#  if defined(HAVE_DECL_PRINTF_UNLOCKED) && HAVE_DECL_PRINTF_UNLOCKED == 0
-extern int printf_unlocked (FILE *, const char *, ...);
+#  define printf(fmt, ...) printf_unlocked (fmt, __VA_ARGS__)
+#  if defined(HAVE_DECL_PRINTF_UNLOCKED) && !HAVE_DECL_PRINTF_UNLOCKED
+extern int printf_unlocked (const char *, ...);
 #  endif
 # endif
 # if defined(HAVE_FPRINTF_UNLOCKED)
 #  undef fprintf
-#  define fprintf fprintf_unlocked
-#  if defined(HAVE_DECL_FPRINTF_UNLOCKED) && HAVE_DECL_FPRINTF_UNLOCKED == 0
+#  define fprintf(stream, fmt, ...) fprintf_unlocked (stream, fmt, __VA_ARGS__)
+#  if defined(HAVE_DECL_FPRINTF_UNLOCKED) && !HAVE_DECL_FPRINTF_UNLOCKED
 extern int fprintf_unlocked (FILE *, const char *, ...);
 #  endif
 # endif
@@ -218,7 +217,7 @@ extern int fprintf_unlocked (FILE *, const char *, ...);
 
 /* Return a value that pluralizes the same way that N does, in all
    languages we know of.  */
-static inline _GL_ATTRIBUTE_CONST unsigned long int
+static inline unsigned long int _GL_ATTRIBUTE_CONST
 select_plural (uintmax_t n)
 {
   /* Reduce by a power of ten, but keep it away from zero.
@@ -375,7 +374,7 @@ select_plural (uintmax_t n)
 #define unlikely(condition) __builtin_expect ((condition) != 0, false)
 
 
-static inline __attribute__ ((__const__)) char *
+static inline char * _GL_ATTRIBUTE_CONST
 bad_cast (const char *s)
 {
   return (char *) s;
